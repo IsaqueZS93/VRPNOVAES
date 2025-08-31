@@ -87,39 +87,18 @@ def save_photo_bytes(
         # falha em disco precisa ser explícita
         raise RuntimeError(f"Falha ao salvar arquivo local '{local_path}': {e}")
 
-    # 2) (Opcional) Google Drive — dentro do root_folder_id (se configurado) ou Shared Drive
+    # 2) (Opcional) Google Drive
     drive_file_id: Optional[str] = None
     if _HAS_DRIVE and _drive is not None:
         try:
-            # tenta usar root_folder do secrets; senão cai para create_folder em Shared Drive
-            base_parent = None
-            if hasattr(_drive, "get_root_folder_id"):
-                base_parent = _drive.get_root_folder_id()
-            if not base_parent and hasattr(_drive, "get_shared_drive_id"):
-                # não usamos diretamente a Shared Drive como pai sem pasta; create_folder cuida disso
-                base_parent = _drive.get_shared_drive_id()
-
-            # cria/obtém pasta "VRP_Fotos" no parent configurado
-            if base_parent and hasattr(_drive, "create_subfolder"):
-                main_folder_id = _drive.create_subfolder(base_parent, "VRP_Fotos")
-            else:
-                # fallback: procura/cria "VRP_Fotos" no escopo padrão
-                main_folder_id = _drive.create_folder("VRP_Fotos")
-
-            # subpasta específica da coleta
-            sub_folder_name = f"VRP_{vrp_site_id}_CK_{checklist_id}"
-            if hasattr(_drive, "create_subfolder"):
-                sub_folder_id = _drive.create_subfolder(main_folder_id, sub_folder_name)
-            else:
-                sub_folder_id = main_folder_id  # melhor do que falhar
-
-            # upload do binário
-            link_or_id = _drive.upload_bytes_to_drive(data, filename, sub_folder_id)
+            # sempre cria dentro da pasta-RAIZ configurada
+            root_id = _drive.get_root_folder_id()
+            main_folder_id = _drive.create_folder("VRP_Fotos", parent_id=root_id)
+            sub_folder_id = _drive.create_subfolder(main_folder_id, f"VRP_{vrp_site_id}_CK_{checklist_id}")
+            link_or_id = _drive.upload_bytes_to_drive(data, filename, folder_id=sub_folder_id)
             drive_file_id = str(link_or_id) if link_or_id else None
         except Exception:
-            # não quebra o fluxo: seguimos só com o local_path
-            drive_file_id = None
-
+            drive_file_id = None  # não quebra o fluxo
     # 3) Garantir coluna drive_file_id (bancos antigos)
     _ensure_drive_column()
 
