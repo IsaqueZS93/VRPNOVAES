@@ -3,7 +3,7 @@ Lista checklists, permite selecionar um como 'corrente' e EXCLUIR com limpeza de
 UI padronizada (header, cards, etc).
 """
 import streamlit as st
-from ..VRP_DATABASE.database import get_conn
+from backend.VRP_DATABASE.database import get_conn
 from ..VRP_SERVICE.history_service import delete_checklist
 from ..VRP_STYLES.layout import page_setup, app_header, section_card, pill
 
