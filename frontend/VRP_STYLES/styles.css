@@ -1,0 +1,5 @@
+/* file: C:\Users\Novaes Engenharia\github - deploy\VRP\frontend\VRP_STYLES\styles.css */
+:root { --radius: 12px; }
+.block { padding: 10px 14px; border-radius: var(--radius); background:#fafafa; border:1px solid #eee; }
+h1, .stHeading { color:#222; }
+.small-muted { color:#666; font-size:12px; }

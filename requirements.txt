@@ -1,0 +1,12 @@
+
+streamlit
+pandas
+pydantic
+python-dotenv
+pillow
+python-docx
+docx2pdf
+groq
+folium
+streamlit-folium
+email-validator
