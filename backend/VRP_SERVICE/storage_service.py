@@ -46,18 +46,18 @@ def save_photo_bytes(
         import traceback
         st.error(f"Erro ao salvar imagem localmente: {e}\n\n{traceback.format_exc()}")
         return ""
-
-    # Upload para Google Drive usando Service_Google_Drive
-    from .service_google_drive import get_google_drive_service, create_folder, create_subfolder, upload_file_to_drive
-    service = get_google_drive_service()
-    main_folder_id = create_folder("VRP_Fotos")
-    sub_folder_id = create_subfolder(main_folder_id, f"VRP_{vrp_site_id}_CK_{checklist_id}")
-    drive_link = upload_file_to_drive(str(p), sub_folder_id)
-    # Salva link público no banco
-
-    drive_file_id = drive_link if drive_link else ""
-    import streamlit as st
     try:
+        conn = get_conn()
+        conn.execute(
+            """INSERT INTO photos (vrp_site_id, checklist_id, label, file_path, drive_file_id, caption, include_in_report, display_order)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (vrp_site_id, checklist_id, label, base, drive_file_id, caption, int(include), order),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        import traceback
+        st.error(f"Erro ao salvar foto no banco: {e}\n\n{traceback.format_exc()}")
         conn = get_conn()
         conn.execute(
             """INSERT INTO photos (vrp_site_id, checklist_id, label, file_path, drive_file_id, caption, include_in_report, display_order)
