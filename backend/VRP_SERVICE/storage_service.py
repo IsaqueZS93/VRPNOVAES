@@ -13,7 +13,7 @@ from io import BytesIO
 from uuid import uuid4
 
 from .export_paths import UPLOADS_DIR
-from backend.VRP_DATABASE.database import get_conn
+from ..VRP_DATABASE.database import get_conn
 
 def _vrp_ck_dir(vrp_site_id: int, checklist_id: int) -> Path:
     d = UPLOADS_DIR / f"VRP_{vrp_site_id}" / f"CK_{checklist_id}"

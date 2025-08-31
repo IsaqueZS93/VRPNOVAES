@@ -5,8 +5,8 @@ Usa streamlit-folium para exibir mapa interativo com marcadores das VRPs.
 import streamlit as st
 import folium
 from streamlit_folium import folium_static
-from backend.VRP_DATABASE.database import get_conn
-from frontend.VRP_STYLES.layout import page_setup, app_header, section_card, pill
+from ..VRP_DATABASE.database import get_conn
+from ..VRP_STYLES.layout import page_setup, app_header, section_card, pill
 
 def _get_vrp_locations():
     """Busca todas as VRPs com coordenadas válidas."""

@@ -11,7 +11,7 @@ from pathlib import Path
 import shutil
 from typing import Dict, Any
 
-from backend.VRP_DATABASE.database import get_conn
+from ..VRP_DATABASE.database import get_conn
 from .export_paths import UPLOADS_DIR, EXPORTS_DIR
 
 def _safe_unlink(path_str: str) -> bool:

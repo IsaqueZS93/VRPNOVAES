@@ -3,7 +3,7 @@ Tela de Tutorial VRP: guia de manutenção e melhores práticas para válvulas r
 Conteúdo resumido do manual técnico (instalação / operação / manutenção) em etapas práticas.
 """
 import streamlit as st
-from frontend.VRP_STYLES.layout import page_setup, app_header, section_card, pill
+from ..VRP_STYLES.layout import page_setup, app_header, section_card, pill
 
 def _steps(prefix: str, items: list[str]):
     """Desenha uma lista de passos com checkboxes; prefix evita colisões de chave."""

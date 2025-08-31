@@ -8,7 +8,7 @@ from typing import Tuple
 from datetime import datetime
 
 from .export_paths import EXPORTS_DIR, LOGOS_DIR
-from backend.VRP_DATABASE.database import get_conn
+from ..VRP_DATABASE.database import get_conn
 
 LOGO_PATH = LOGOS_DIR / "NOVAES.png"
 

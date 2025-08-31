@@ -8,8 +8,9 @@ from pathlib import Path
 ROOT = Path(r"C:\Users\Novaes Engenharia\github - deploy\VRP").resolve()
 
 BACKEND = ROOT / "backend"
-FRONTEND = ROOT / "frontend"
+from pathlib import Path
 
+from ..VRP_DATABASE.database import get_conn
 DB_DIR = BACKEND / "VRP_DATABASE"
 DB_PATH = DB_DIR / "vrp.db"
 

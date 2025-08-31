@@ -3,11 +3,11 @@ Gera narrativa com IA (ou offline) e exporta DOCX/PDF.
 UI padronizada com header/logo, toolbar e cards.
 """
 import streamlit as st
-from backend.VRP_SERVICE.ai_service import generate_ai_summary
-from backend.VRP_SERVICE.report_service import generate_full_report
-from backend.VRP_SERVICE.email_service import email_service
-from backend.VRP_DATABASE.database import get_conn
-from frontend.VRP_STYLES.layout import page_setup, app_header, toolbar, section_card, pill
+from ..VRP_SERVICE.ai_service import generate_ai_summary
+from ..VRP_SERVICE.report_service import generate_full_report
+from ..VRP_SERVICE.email_service import email_service
+from ..VRP_DATABASE.database import get_conn
+from ..VRP_STYLES.layout import page_setup, app_header, toolbar, section_card, pill
 
 def _get_saved_ai_text(checklist_id: int) -> str | None:
     conn = get_conn()

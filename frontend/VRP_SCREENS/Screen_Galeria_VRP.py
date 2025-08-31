@@ -3,7 +3,7 @@ Galeria por VRP: escolha a VRP e veja todas as imagens associadas (qualquer chec
 UI padronizada com header/logo, cards e paleta.
 """
 import streamlit as st
-from backend.VRP_DATABASE.database import get_conn
+from ..VRP_DATABASE.database import get_conn
 from backend.VRP_SERVICE.storage_service import list_photos_by_vrp
 from frontend.VRP_STYLES.layout import page_setup, app_header, section_card, pill
 

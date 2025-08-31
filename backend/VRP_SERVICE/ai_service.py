@@ -8,7 +8,7 @@ Docs oficiais: models e chat completions.
 import os
 from textwrap import dedent
 from dotenv import load_dotenv
-from backend.VRP_DATABASE.database import get_conn
+from ..VRP_DATABASE.database import get_conn
 
 load_dotenv()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
