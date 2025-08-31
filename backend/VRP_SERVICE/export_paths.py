@@ -15,6 +15,7 @@ DB_DIR = BACKEND / "VRP_DATABASE"
 DB_PATH = DB_DIR / "vrp.db"
 
 TEMPLATES_DIR = BACKEND / "VRP_SERVICE" / "templates"
+FRONTEND = ROOT / "frontend"
 LOGOS_DIR = FRONTEND / "assets" / "logos"
 UPLOADS_DIR = FRONTEND / "assets" / "uploads"
 EXPORTS_DIR = FRONTEND / "assets" / "exports"
