@@ -23,6 +23,7 @@ def render():
             if senha == senhas[idx]:
                 st.session_state["usuario"] = usuario
                 st.session_state["tipo_usuario"] = tipos[idx]
+                st.session_state["authenticated"] = True  # Flag de autenticação
                 # Após login, direciona para tela inicial do menu
                 tipo = tipos[idx].lower()
                 telas_ope = ["Checklist", "Fotos", "Histórico", "Galeria VRP", "Mapa VRP", "Tutorial VRP"]
@@ -45,6 +46,7 @@ def logout():
     # Limpa todas as variáveis de sessão relacionadas ao login
     st.session_state.pop("usuario", None)
     st.session_state.pop("tipo_usuario", None)
+    st.session_state.pop("authenticated", None)
     st.session_state.pop("nav_radio", None)
     st.session_state.pop("nav_to", None)
     # Força o redirecionamento para a tela de login

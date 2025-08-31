@@ -43,14 +43,38 @@ PAGES = {
     "Enviar E-mail": Screen_Enviar_Email.render if hasattr(Screen_Enviar_Email, "render") else Screen_Enviar_Email,
 }
 
+def is_user_logged_in():
+    """Verifica se o usuário está logado de forma robusta"""
+    # Verifica se as chaves existem e não são None
+    has_usuario = "usuario" in st.session_state and st.session_state["usuario"] is not None
+    has_tipo = "tipo_usuario" in st.session_state and st.session_state["tipo_usuario"] is not None
+    is_authenticated = st.session_state.get("authenticated", False)
+    
+    # Debug: mostra o estado atual (remover em produção)
+    # st.write(f"Debug - usuario: {has_usuario}, tipo: {has_tipo}, auth: {is_authenticated}")
+    
+    return has_usuario and has_tipo and is_authenticated
+
 # Verifica se o usuário está logado
-if "usuario" not in st.session_state or "tipo_usuario" not in st.session_state:
+if not is_user_logged_in():
     st.sidebar.image(logo_path(), width='stretch')
     st.sidebar.title("VRP")
     # Força a tela de login
     st.session_state["nav_radio"] = "Login"
     PAGES["Login"]()
     st.stop()
+
+# Garante que o usuário autenticado não seja redirecionado para login
+if is_user_logged_in() and st.session_state.get("nav_radio") == "Login":
+    # Redireciona para a primeira tela disponível
+    tipo = st.session_state["tipo_usuario"].lower()
+    telas_ope = ["Checklist", "Fotos", "Histórico", "Galeria VRP", "Mapa VRP", "Tutorial VRP"]
+    if tipo == "ope":
+        st.session_state["nav_radio"] = telas_ope[0]
+    else:
+        menu_disponivel = [k for k in PAGES.keys() if k != "Login"]
+        st.session_state["nav_radio"] = menu_disponivel[0]
+    st.rerun()
 
 # Usuário está logado, prossegue com a aplicação
 tipo = st.session_state["tipo_usuario"].lower()
@@ -66,14 +90,18 @@ st.sidebar.title(f"VRP ({st.session_state['usuario']})")
 
 # Garante que o usuário não fique na tela de login após fazer login
 current = st.session_state.get("nav_radio", menu[0])
+
+# Se o usuário está na tela de login, redireciona para a primeira tela disponível
 if current == "Login":
     current = menu[0]
     st.session_state["nav_radio"] = current
 
+# Se a tela atual não está no menu permitido, redireciona para a primeira disponível
 if current not in menu:
     current = menu[0]
     st.session_state["nav_radio"] = current
 
+# Processa navegação programática
 if st.session_state.get("nav_to") in PAGES:
     current = st.session_state.pop("nav_to")
     if current not in menu:
