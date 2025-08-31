@@ -48,36 +48,37 @@ if "usuario" not in st.session_state or "tipo_usuario" not in st.session_state:
     st.sidebar.title("VRP")
     st.session_state["nav_radio"] = "Login"
     PAGES["Login"]()
+    st.stop()
+
+tipo = st.session_state["tipo_usuario"].lower()
+# Telas permitidas para OPE
+telas_ope = ["Checklist", "Fotos", "Histórico", "Galeria VRP", "Mapa VRP", "Tutorial VRP"]
+if tipo == "ope":
+    menu = telas_ope
 else:
-    tipo = st.session_state["tipo_usuario"].lower()
-    # Telas permitidas para OPE
-    telas_ope = ["Checklist", "Fotos", "Histórico", "Galeria VRP", "Mapa VRP", "Tutorial VRP"]
-    if tipo == "ope":
-        menu = telas_ope
-    else:
-        menu = [k for k in PAGES.keys() if k != "Login"]
-    st.sidebar.image(logo_path(), use_container_width=True)
-    st.sidebar.title(f"VRP ({st.session_state['usuario']})")
-    current = st.session_state.get("nav_radio", menu[0])
+    menu = [k for k in PAGES.keys() if k != "Login"]
+st.sidebar.image(logo_path(), use_container_width=True)
+st.sidebar.title(f"VRP ({st.session_state['usuario']})")
+current = st.session_state.get("nav_radio", menu[0])
+if current not in menu:
+    current = menu[0]
+if st.session_state.get("nav_to") in PAGES:
+    current = st.session_state.pop("nav_to")
     if current not in menu:
         current = menu[0]
-    if st.session_state.get("nav_to") in PAGES:
-        current = st.session_state.pop("nav_to")
-        if current not in menu:
-            current = menu[0]
-    # Corrige o valor do radio se não estiver no menu
-    if st.session_state.get("nav_radio") not in menu:
-        st.session_state["nav_radio"] = menu[0]
-        current = menu[0]
-    st.sidebar.radio("Navegar", menu, index=menu.index(current), key="nav_radio")
-    # Botão logout
-    if st.sidebar.button("Logout"):
-        Screen_Login.logout()
-        st.stop()
-    # render
-    PAGES[st.session_state["nav_radio"]]()
-    st.sidebar.markdown("---")
-    st.sidebar.write("Checklist atual:", st.session_state.get("current_checklist_id","—"))
-    # Subir banco para o GitHub ao finalizar (pode ser ajustado para eventos específicos)
-    import atexit
-    atexit.register(subir_banco_github)
+# Corrige o valor do radio se não estiver no menu
+if st.session_state.get("nav_radio") not in menu:
+    st.session_state["nav_radio"] = menu[0]
+    current = menu[0]
+st.sidebar.radio("Navegar", menu, index=menu.index(current), key="nav_radio")
+# Botão logout
+if st.sidebar.button("Logout"):
+    Screen_Login.logout()
+    st.stop()
+# render
+PAGES[st.session_state["nav_radio"]]()
+st.sidebar.markdown("---")
+st.sidebar.write("Checklist atual:", st.session_state.get("current_checklist_id","—"))
+# Subir banco para o GitHub ao finalizar (pode ser ajustado para eventos específicos)
+import atexit
+atexit.register(subir_banco_github)
