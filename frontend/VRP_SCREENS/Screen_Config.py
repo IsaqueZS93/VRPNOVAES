@@ -33,7 +33,7 @@ def render():
                     success = add_destinatario(new_email)
                     if success:
                         st.success(f"Email {new_email} adicionado com sucesso!")
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.warning(f"Email {new_email} já está cadastrado ou houve erro ao salvar!")
                 else:
