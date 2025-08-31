@@ -61,14 +61,27 @@ class EmailService:
         pass
         
     def _get_config(self):
-        """Obtém configurações de email dinamicamente."""
+        """Obtém configurações de email dinamicamente, compatível com .env e Streamlit Cloud."""
+        import os
+        import streamlit as st
+        # Prioriza st.secrets se disponível
+        if hasattr(st, "secrets") and "mail" in st.secrets:
+            config = st.secrets["mail"]
+            return {
+                'host': config.get("EMAIL_SMTP_SERVER", "smtp.gmail.com"),
+                'port': int(config.get("EMAIL_SMTP_PORT", 587)),
+                'use_tls': True,
+                'user': config.get("EMAIL_ADDRESS", ""),
+                'password': config.get("EMAIL_PASSWORD", ""),
+                'from_email': config.get("GESTOR_EMAIL", "")
+            }
+        # Fallback para .env
         from dotenv import load_dotenv
         load_dotenv()
-        
         return {
             'host': os.getenv("EMAIL_SMTP_SERVER", "smtp.gmail.com"),
             'port': int(os.getenv("EMAIL_SMTP_PORT", "587")),
-            'use_tls': True,  # Sempre usar TLS para Gmail
+            'use_tls': True,
             'user': os.getenv("EMAIL_ADDRESS", ""),
             'password': os.getenv("EMAIL_PASSWORD", ""),
             'from_email': os.getenv("GESTOR_EMAIL", "")
