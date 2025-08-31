@@ -65,6 +65,10 @@ else:
         current = st.session_state.pop("nav_to")
         if current not in menu:
             current = menu[0]
+    # Corrige o valor do radio se não estiver no menu
+    if st.session_state.get("nav_radio") not in menu:
+        st.session_state["nav_radio"] = menu[0]
+        current = menu[0]
     st.sidebar.radio("Navegar", menu, index=menu.index(current), key="nav_radio")
     # Botão logout
     if st.sidebar.button("Logout"):
