@@ -31,57 +31,20 @@ def save_photo_bytes(
     order: int = 1,
 ) -> str:
     """Salva bytes como JPG único e grava em 'photos'. Retorna caminho salvo."""
-    # Salva localmente (opcional, pode remover)
+    # Salva localmente (opcional)
     folder = _vrp_ck_dir(vrp_site_id, checklist_id)
     base = f"{order:03d}_{uuid4().hex[:8]}.jpg"
     p = folder / base
     Image.open(BytesIO(data)).convert("RGB").save(p, "JPEG", quality=90)
 
-    # Upload para Google Drive usando Service Account
-    from googleapiclient.discovery import build
-    from googleapiclient.http import MediaIoBaseUpload
-    from google.oauth2.service_account import Credentials
-    import io
-    import streamlit as st
-
-    service_account_info = dict(st.secrets["google_drive_service_account"])
-    creds = Credentials.from_service_account_info(service_account_info, scopes=["https://www.googleapis.com/auth/drive.file"])
-    service = build('drive', 'v3', credentials=creds)
-
-    # Nome da pasta principal do app
-    main_folder_name = "VRP_Fotos"
-    # Nome da subpasta por checklist
-    sub_folder_name = f"VRP_{vrp_site_id}_CK_{checklist_id}"
-
-    # Função para buscar ou criar pasta
-    def get_or_create_folder(service, folder_name, parent_id=None):
-        query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'"
-        if parent_id:
-            query += f" and '{parent_id}' in parents"
-        results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
-        items = results.get('files', [])
-        if items:
-            return items[0]['id']
-        # Cria pasta se não existe
-        folder_metadata = {
-            'name': folder_name,
-            'mimeType': 'application/vnd.google-apps.folder'
-        }
-        if parent_id:
-            folder_metadata['parents'] = [parent_id]
-        folder = service.files().create(body=folder_metadata, fields='id').execute()
-        return folder.get('id')
-
-    # Cria/busca pasta principal
-    main_folder_id = get_or_create_folder(service, main_folder_name)
-    # Cria/busca subpasta do checklist
-    sub_folder_id = get_or_create_folder(service, sub_folder_name, parent_id=main_folder_id)
-
-    # Upload do arquivo na subpasta
-    file_metadata = {'name': base, 'parents': [sub_folder_id]}
-    media = MediaIoBaseUpload(io.BytesIO(data), mimetype='image/jpeg')
-    drive_file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-    drive_file_id = drive_file.get('id')
+    # Upload para Google Drive usando Service_Google_Drive
+    from backend.services.Service_Google_Drive import get_google_drive_service, create_folder, create_subfolder, upload_file_to_drive
+    service = get_google_drive_service()
+    main_folder_id = create_folder("VRP_Fotos")
+    sub_folder_id = create_subfolder(main_folder_id, f"VRP_{vrp_site_id}_CK_{checklist_id}")
+    drive_link = upload_file_to_drive(str(p), sub_folder_id)
+    # Salva link público no banco
+    drive_file_id = drive_link if drive_link else None
 
     conn = get_conn()
     conn.execute(
