@@ -24,7 +24,7 @@ def render():
                 st.session_state["usuario"] = usuario
                 st.session_state["tipo_usuario"] = tipos[idx]
                 st.success(f"Bem-vindo, {usuario}!")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Senha incorreta.")
         else:
@@ -35,4 +35,4 @@ def render():
 def logout():
     st.session_state.pop("usuario", None)
     st.session_state.pop("tipo_usuario", None)
-    st.experimental_rerun()
+    st.rerun()
