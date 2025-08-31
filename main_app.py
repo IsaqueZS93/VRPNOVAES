@@ -11,7 +11,7 @@ from backend.VRP_DATABASE.github_db_sync import baixar_banco_github, subir_banco
 from frontend.VRP_SCREENS import (
     Screen_Checklist_Form, Screen_Photos, Screen_Historico, Screen_Galeria_VRP, Screen_Relatorio, Screen_Config
 )
-from frontend.VRP_SCREENS.Screen_Enviar_Email import *
+from frontend.VRP_SCREENS import Screen_Enviar_Email
 from frontend.VRP_SCREENS.SCREEN_VRP_TUTORIAL import render as Screen_VRP_Tutorial
 from frontend.VRP_SCREENS.Screen_Mapa_VRP import render as Screen_Mapa_VRP
 from frontend.VRP_STYLES.brand import logo_path
@@ -38,7 +38,7 @@ PAGES = {
     "Mapa VRP":   Screen_Mapa_VRP,
     "Tutorial VRP": Screen_VRP_Tutorial,
     "Config":     Screen_Config.render,
-    "Enviar E-mail": lambda: None if __name__ != "__main__" else None,
+    "Enviar E-mail": Screen_Enviar_Email.render if hasattr(Screen_Enviar_Email, "render") else Screen_Enviar_Email,
 }
 
 # Sidebar com logo e nav
@@ -53,10 +53,7 @@ if st.session_state.get("nav_to") in PAGES:
 st.sidebar.radio("Navegar", page_names, index=page_names.index(current), key="nav_radio")
 
 
-if st.session_state["nav_radio"] == "Enviar E-mail":
-    import frontend.VRP_SCREENS.Screen_Enviar_Email
-else:
-    PAGES[st.session_state["nav_radio"]]()
+PAGES[st.session_state["nav_radio"]]()
 st.sidebar.markdown("---")
 st.sidebar.write("Checklist atual:", st.session_state.get("current_checklist_id","—"))
 
