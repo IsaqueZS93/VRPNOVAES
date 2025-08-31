@@ -86,18 +86,24 @@ def render():
                         ))
                 submitted = st.form_submit_button("Salvar todas")
                 if submitted:
+                    count = 0
                     for m in meta:
+                        img_bytes = m["file"].getvalue()
+                        if not img_bytes or len(img_bytes) == 0:
+                            st.warning(f"Arquivo '{m['file'].name}' está vazio ou corrompido e não foi salvo.")
+                            continue
                         save_photo_bytes(
                             vrp_site_id=site_id,
                             checklist_id=cid,
                             original_name=m["file"].name,
-                            data=m["file"].getvalue(),
+                            data=img_bytes,
                             label=m["label"],
                             caption=m["caption"],
                             include=m["include"],
                             order=m["order"],
                         )
-                    st.success(f"{len(meta)} imagem(ns) salva(s).")
+                        count += 1
+                    st.success(f"{count} imagem(ns) salva(s) com sucesso.")
                     st.rerun()
         else:
             st.caption("Dica: você pode arrastar e soltar os arquivos aqui.")
