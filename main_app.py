@@ -43,13 +43,16 @@ PAGES = {
     "Enviar E-mail": Screen_Enviar_Email.render if hasattr(Screen_Enviar_Email, "render") else Screen_Enviar_Email,
 }
 
+# Verifica se o usuário está logado
 if "usuario" not in st.session_state or "tipo_usuario" not in st.session_state:
     st.sidebar.image(logo_path(), width='stretch')
     st.sidebar.title("VRP")
+    # Força a tela de login
     st.session_state["nav_radio"] = "Login"
     PAGES["Login"]()
     st.stop()
 
+# Usuário está logado, prossegue com a aplicação
 tipo = st.session_state["tipo_usuario"].lower()
 # Telas permitidas para OPE
 telas_ope = ["Checklist", "Fotos", "Histórico", "Galeria VRP", "Mapa VRP", "Tutorial VRP"]
@@ -57,15 +60,26 @@ if tipo == "ope":
     menu = telas_ope
 else:
     menu = [k for k in PAGES.keys() if k != "Login"]
+
 st.sidebar.image(logo_path(), width='stretch')
 st.sidebar.title(f"VRP ({st.session_state['usuario']})")
+
+# Garante que o usuário não fique na tela de login após fazer login
 current = st.session_state.get("nav_radio", menu[0])
+if current == "Login":
+    current = menu[0]
+    st.session_state["nav_radio"] = current
+
 if current not in menu:
     current = menu[0]
+    st.session_state["nav_radio"] = current
+
 if st.session_state.get("nav_to") in PAGES:
     current = st.session_state.pop("nav_to")
     if current not in menu:
         current = menu[0]
+    st.session_state["nav_radio"] = current
+
 # Corrige o valor do radio se não estiver no menu
 if st.session_state.get("nav_radio") not in menu:
     st.session_state["nav_radio"] = menu[0]

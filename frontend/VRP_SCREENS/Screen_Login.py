@@ -24,13 +24,14 @@ def render():
                 st.session_state["usuario"] = usuario
                 st.session_state["tipo_usuario"] = tipos[idx]
                 # Após login, direciona para tela inicial do menu
-                from main_app import PAGES
                 tipo = tipos[idx].lower()
                 telas_ope = ["Checklist", "Fotos", "Histórico", "Galeria VRP", "Mapa VRP", "Tutorial VRP"]
                 if tipo == "ope":
                     st.session_state["nav_radio"] = telas_ope[0]
                 else:
-                    st.session_state["nav_radio"] = [k for k in PAGES.keys() if k != "Login"][0]
+                    # Define a primeira tela disponível para usuários não-OPE
+                    telas_disponiveis = ["Checklist", "Fotos", "Histórico", "Relatório", "Galeria VRP", "Mapa VRP", "Tutorial VRP", "Config", "Enviar E-mail"]
+                    st.session_state["nav_radio"] = telas_disponiveis[0]
                 st.success(f"Bem-vindo, {usuario}!")
                 st.rerun()
             else:
@@ -41,6 +42,11 @@ def render():
 # Para logout, basta limpar a sessão
 
 def logout():
+    # Limpa todas as variáveis de sessão relacionadas ao login
     st.session_state.pop("usuario", None)
     st.session_state.pop("tipo_usuario", None)
+    st.session_state.pop("nav_radio", None)
+    st.session_state.pop("nav_to", None)
+    # Força o redirecionamento para a tela de login
+    st.session_state["nav_radio"] = "Login"
     st.rerun()
