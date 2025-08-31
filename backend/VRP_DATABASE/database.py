@@ -158,5 +158,95 @@ def listar_destinatarios() -> list:
         conn.close()
         return emails
     except Exception:
-        conn.close()
-        return []
+        # Migração segura: verifica existência e renomeia/adiciona colunas conforme necessário
+        cur.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS companies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                type TEXT CHECK(type IN ('CONTRATANTE','CONTRATADA')) NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS teams (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS vrp_sites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                city TEXT,
+                place TEXT,
+                brand TEXT,
+                type TEXT CHECK(type IN ('Ação Direta','Auto-Regulada','Pilotada')),
+                dn INTEGER CHECK(dn IN (50,60,85,100,150,200,250,300,350)),
+                access_install TEXT CHECK(access_install IN ('passeio','rua')),
+                traffic TEXT CHECK(traffic IN ('alto','baixo')),
+                lids TEXT CHECK(lids IN ('visiveis','cobertas')),
+                notes_access TEXT,
+                latitude REAL,
+                longitude REAL,
+                network_depth_cm REAL,
+                has_automation INTEGER DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS checklists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                service_type TEXT CHECK(service_type IN ('Manutenção Preventiva','Manutenção Preditiva','Manutenção Corretiva','Ajuste e Aferição')) NOT NULL,
+                contractor_id INTEGER,
+                contracted_id INTEGER,
+                team_id INTEGER,
+                vrp_site_id INTEGER,
+                has_reg_upstream INTEGER DEFAULT 0,
+                has_reg_downstream INTEGER DEFAULT 0,
+                has_bypass INTEGER DEFAULT 0,
+                notes_hydraulics TEXT,
+                p_up_before REAL, p_down_before REAL, p_up_after REAL, p_down_after REAL,
+                observations_general TEXT,
+                ai_summary TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                checklist_id INTEGER,
+                ai_summary TEXT,
+                docx_path TEXT,
+                pdf_path TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS photos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                checklist_id INTEGER,
+                vrp_site_id INTEGER,
+                file_path TEXT,
+                drive_file_id TEXT,
+                label TEXT,
+                caption TEXT,
+                include_in_report INTEGER,
+                display_order INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS email_destinatarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE
+            );
+            """
+        )
+        # Migração: renomeia colunas antigas se necessário
+        # Adiciona colunas novas se não existirem
+        # drive_file_id
+        if not _column_exists(conn, "photos", "drive_file_id"):
+            cur.execute("ALTER TABLE photos ADD COLUMN drive_file_id TEXT;")
+            conn.commit()
+        # file_path
+        if not _column_exists(conn, "photos", "file_path") and _column_exists(conn, "photos", "path"):
+            cur.execute("ALTER TABLE photos RENAME COLUMN path TO file_path;")
+            conn.commit()
+        # include_in_report
+        if not _column_exists(conn, "photos", "include_in_report") and _column_exists(conn, "photos", "include"):
+            cur.execute("ALTER TABLE photos RENAME COLUMN include TO include_in_report;")
+            conn.commit()
+        # display_order
+        if not _column_exists(conn, "photos", "display_order") and _column_exists(conn, "photos", "order_num"):
+            cur.execute("ALTER TABLE photos RENAME COLUMN order_num TO display_order;")
+            conn.commit()
