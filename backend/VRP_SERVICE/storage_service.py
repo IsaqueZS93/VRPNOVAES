@@ -2,7 +2,7 @@
 Gerencia fotos:
 - Diretório por VRP: uploads/VRP_{site_id}/CK_{checklist_id}/arquivo.ext
 - save_photo_bytes(): salva local + (opcionalmente) Google Drive, e registra no DB
-- list_photos(checklist_id), list_photos_by_vrp(vrp_site_id)
+- list_photos(checklist_id), list_photos_by_vrp(vrp_site_id) (tolerantes ao esquema)
 - update_photo_flags(), delete_photo()
 """
 from __future__ import annotations
@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import os
-import hashlib
 from uuid import uuid4
 
 from backend.VRP_SERVICE.export_paths import UPLOADS_DIR
@@ -20,7 +19,6 @@ from backend.VRP_DATABASE.database import get_conn
 _HAS_DRIVE = False
 _drive = None
 try:
-    # O módulo é opcional. Só usamos se existir.
     from backend.VRP_SERVICE import service_google_drive as _drive  # type: ignore
     _HAS_DRIVE = True
 except Exception:
@@ -40,19 +38,25 @@ def _safe_name(original_name: str, order: int) -> str:
     base = os.path.basename(original_name).strip().replace(" ", "_")
     name, ext = os.path.splitext(base)
     if ext.lower() not in [".jpg", ".jpeg", ".png", ".webp"]:
-        ext = ".jpg"  # fallback de extensão
+        ext = ".jpg"  # fallback
     h = uuid4().hex[:8]
     return f"{order:03d}_{name or 'img'}_{h}{ext.lower()}"
 
 def _ensure_drive_column():
     """Garante a existência da coluna drive_file_id em photos (se não existir)."""
     conn = get_conn()
-    cols = conn.execute("PRAGMA table_info(photos)").fetchall()
-    names = {c["name"] for c in cols}
-    if "drive_file_id" not in names:
-        conn.execute("ALTER TABLE photos ADD COLUMN drive_file_id TEXT")
-        conn.commit()
-    conn.close()
+    try:
+        cols = conn.execute("PRAGMA table_info(photos)").fetchall()
+        names = {c["name"] for c in cols}
+        if "drive_file_id" not in names:
+            conn.execute("ALTER TABLE photos ADD COLUMN drive_file_id TEXT")
+            conn.commit()
+    finally:
+        conn.close()
+
+def _has_column(conn, table: str, column: str) -> bool:
+    cols = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(c["name"] == column for c in cols)
 
 
 # ------------------------------ API ------------------------------
@@ -85,15 +89,12 @@ def save_photo_bytes(
         try:
             main_folder_id = _drive.create_folder("VRP_Fotos")
             sub_folder_id = _drive.create_subfolder(main_folder_id, f"VRP_{vrp_site_id}_CK_{checklist_id}")
-            # up no mesmo nome do arquivo local
             link_or_id = _drive.upload_bytes_to_drive(data, filename, sub_folder_id)
-            # guardar o que o serviço retornar (id/link)
             drive_file_id = str(link_or_id) if link_or_id else None
         except Exception:
-            # Não falhar o fluxo: seguimos só com local
-            drive_file_id = None
+            drive_file_id = None  # não quebra o fluxo
 
-    # 3) Garantir coluna drive_file_id
+    # 3) Garantir coluna drive_file_id (bancos antigos)
     _ensure_drive_column()
 
     # 4) Inserir no DB
@@ -121,51 +122,55 @@ def save_photo_bytes(
 
 
 def list_photos(checklist_id: int) -> List[Dict[str, Any]]:
-    """Lista as fotos de um checklist (ordem + id)."""
+    """Lista as fotos de um checklist (ordem + id). Tolerante à ausência de drive_file_id."""
     conn = get_conn()
-    rows = conn.execute(
-        """
-        SELECT id, vrp_site_id, checklist_id, file_path, label, caption, include_in_report, display_order, drive_file_id
-        FROM photos
-        WHERE checklist_id = ?
-        ORDER BY display_order, id
-        """,
-        (checklist_id,),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        has_drive = _has_column(conn, "photos", "drive_file_id")
+        select_sql = (
+            "SELECT id, vrp_site_id, checklist_id, file_path, label, caption, "
+            "include_in_report, display_order"
+            + (", drive_file_id " if has_drive else ", NULL AS drive_file_id ")
+            + "FROM photos WHERE checklist_id=? ORDER BY display_order, id"
+        )
+        rows = conn.execute(select_sql, (checklist_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 def list_photos_by_vrp(vrp_site_id: int) -> List[Dict[str, Any]]:
-    """Lista todas as fotos de uma VRP (todas as coletas), mais novo checklist primeiro."""
+    """Lista todas as fotos de uma VRP (todas as coletas), mais novo checklist primeiro. Tolerante ao esquema."""
     conn = get_conn()
-    rows = conn.execute(
-        """
-        SELECT id, vrp_site_id, checklist_id, file_path, label, caption, include_in_report, display_order, drive_file_id
-        FROM photos
-        WHERE vrp_site_id = ?
-        ORDER BY checklist_id DESC, display_order, id
-        """,
-        (vrp_site_id,),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        has_drive = _has_column(conn, "photos", "drive_file_id")
+        select_sql = (
+            "SELECT id, vrp_site_id, checklist_id, file_path, label, caption, "
+            "include_in_report, display_order"
+            + (", drive_file_id " if has_drive else ", NULL AS drive_file_id ")
+            + "FROM photos WHERE vrp_site_id=? ORDER BY checklist_id DESC, display_order, id"
+        )
+        rows = conn.execute(select_sql, (vrp_site_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 def update_photo_flags(photo_id: int, include: bool, order: int, caption: str, label: Optional[str] = None) -> None:
     conn = get_conn()
-    if label is None:
-        conn.execute(
-            "UPDATE photos SET include_in_report=?, display_order=?, caption=? WHERE id=?",
-            (int(bool(include)), int(order), caption, photo_id),
-        )
-    else:
-        conn.execute(
-            "UPDATE photos SET include_in_report=?, display_order=?, caption=?, label=? WHERE id=?",
-            (int(bool(include)), int(order), caption, label, photo_id),
-        )
-    conn.commit()
-    conn.close()
+    try:
+        if label is None:
+            conn.execute(
+                "UPDATE photos SET include_in_report=?, display_order=?, caption=? WHERE id=?",
+                (int(bool(include)), int(order), caption, photo_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE photos SET include_in_report=?, display_order=?, caption=?, label=? WHERE id=?",
+                (int(bool(include)), int(order), caption, label, photo_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def delete_photo(photo_id: int) -> bool:
@@ -174,30 +179,30 @@ def delete_photo(photo_id: int) -> bool:
     e (se houver) tenta excluir no Google Drive.
     """
     conn = get_conn()
-    row = conn.execute(
-        "SELECT file_path, drive_file_id FROM photos WHERE id=?",
-        (photo_id,),
-    ).fetchone()
+    try:
+        row = conn.execute(
+            "SELECT file_path, drive_file_id FROM photos WHERE id=?",
+            (photo_id,),
+        ).fetchone()
 
-    if row:
-        # Remove arquivo local (se existir)
-        try:
-            p = Path(row["file_path"])
-            p.unlink(missing_ok=True)
-        except Exception:
-            pass
-
-        # (Opcional) exclui do Drive se suportado e se houver id
-        drive_id = row["drive_file_id"]
-        if _HAS_DRIVE and _drive is not None and drive_id:
+        if row:
+            # Remove arquivo local
             try:
-                # Só chama se o serviço tiver essa função
-                if hasattr(_drive, "delete_from_drive"):
-                    _drive.delete_from_drive(drive_id)
+                Path(row["file_path"]).unlink(missing_ok=True)
             except Exception:
                 pass
 
-    conn.execute("DELETE FROM photos WHERE id=?", (photo_id,))
-    conn.commit()
-    conn.close()
-    return True
+            # (Opcional) exclui do Drive
+            drive_id = row["drive_file_id"] if "drive_file_id" in row.keys() else None
+            if _HAS_DRIVE and _drive is not None and drive_id:
+                try:
+                    if hasattr(_drive, "delete_from_drive"):
+                        _drive.delete_from_drive(drive_id)
+                except Exception:
+                    pass
+
+        conn.execute("DELETE FROM photos WHERE id=?", (photo_id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
