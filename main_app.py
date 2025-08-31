@@ -45,30 +45,27 @@ PAGES = {
 
 def is_user_logged_in():
     """Verifica se o usuário está logado de forma robusta"""
-    return (st.session_state.get("authenticated", False) and 
-            st.session_state.get("usuario") is not None and 
-            st.session_state.get("tipo_usuario") is not None)
+    # Verifica se existe a flag de autenticação
+    if not st.session_state.get("authenticated", False):
+        return False
+    
+    # Verifica se existem os dados do usuário
+    if not st.session_state.get("usuario") or not st.session_state.get("tipo_usuario"):
+        return False
+    
+    return True
+
+
+
+
 
 # Verifica se o usuário está logado
 if not is_user_logged_in():
     st.sidebar.image(logo_path(), width='stretch')
     st.sidebar.title("VRP")
-    # Força a tela de login
     st.session_state["nav_radio"] = "Login"
     PAGES["Login"]()
     st.stop()
-
-# Garante que o usuário autenticado não seja redirecionado para login
-if is_user_logged_in() and st.session_state.get("nav_radio") == "Login":
-    # Redireciona para a primeira tela disponível
-    tipo = st.session_state["tipo_usuario"].lower()
-    telas_ope = ["Checklist", "Fotos", "Histórico", "Galeria VRP", "Mapa VRP", "Tutorial VRP"]
-    if tipo == "ope":
-        st.session_state["nav_radio"] = telas_ope[0]
-    else:
-        menu_disponivel = [k for k in PAGES.keys() if k != "Login"]
-        st.session_state["nav_radio"] = menu_disponivel[0]
-    st.rerun()
 
 # Usuário está logado, prossegue com a aplicação
 tipo = st.session_state["tipo_usuario"].lower()
@@ -81,6 +78,16 @@ else:
 
 st.sidebar.image(logo_path(), width='stretch')
 st.sidebar.title(f"VRP ({st.session_state['usuario']})")
+
+# Garante que o usuário autenticado não seja redirecionado para login
+if st.session_state.get("nav_radio") == "Login":
+    # Redireciona para a primeira tela disponível
+    if tipo == "ope":
+        st.session_state["nav_radio"] = telas_ope[0]
+    else:
+        menu_disponivel = [k for k in PAGES.keys() if k != "Login"]
+        st.session_state["nav_radio"] = menu_disponivel[0]
+    st.rerun()
 
 # Processa navegação programática primeiro
 if st.session_state.get("nav_to") in PAGES:
