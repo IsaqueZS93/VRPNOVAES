@@ -3,7 +3,7 @@ Tela de Configurações: mostra caminhos e flags simples.
 """
 import streamlit as st
 from backend.VRP_SERVICE.export_paths import DB_PATH, UPLOADS_DIR, EXPORTS_DIR
-from ..VRP_SERVICE.email_service import email_service
+from backend.VRP_SERVICE.email_service import email_service
 from ..VRP_STYLES.layout import page_setup, app_header, section_card, pill
 
 def render():
