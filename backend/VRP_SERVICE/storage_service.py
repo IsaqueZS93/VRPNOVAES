@@ -35,7 +35,12 @@ def save_photo_bytes(
     folder = _vrp_ck_dir(vrp_site_id, checklist_id)
     base = f"{order:03d}_{uuid4().hex[:8]}.jpg"
     p = folder / base
-    Image.open(BytesIO(data)).convert("RGB").save(p, "JPEG", quality=90)
+    try:
+        Image.open(BytesIO(data)).convert("RGB").save(p, "JPEG", quality=90)
+    except Exception as e:
+        import streamlit as st
+        import traceback
+        st.error(f"Erro ao salvar imagem localmente: {e}\n\n{traceback.format_exc()}")
 
     # Upload para Google Drive usando Service_Google_Drive
     from .service_google_drive import get_google_drive_service, create_folder, create_subfolder, upload_file_to_drive
