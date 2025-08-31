@@ -31,21 +31,19 @@ def save_photo_bytes(
     order: int = 1,
 ) -> str:
     """Salva bytes como JPG único e grava em 'photos'. Retorna caminho salvo."""
-    # Salva localmente (opcional)
-    folder = _vrp_ck_dir(vrp_site_id, checklist_id)
-    base = f"{order:03d}_{uuid4().hex[:8]}.jpg"
-    p = folder / base
     import streamlit as st
-    st.info(f"Salvando imagem em: {p}")
     if not data or len(data) == 0:
         st.error("Nenhum dado de imagem recebido. O arquivo pode estar vazio ou corrompido.")
         return ""
-    try:
-        Image.open(BytesIO(data)).convert("RGB").save(p, "JPEG", quality=90)
-    except Exception as e:
-        import traceback
-        st.error(f"Erro ao salvar imagem localmente: {e}\n\n{traceback.format_exc()}")
-        return ""
+    # Upload direto para Google Drive
+    from .service_google_drive import create_folder, create_subfolder, upload_bytes_to_drive
+    main_folder_id = create_folder("VRP_Fotos")
+    sub_folder_id = create_subfolder(main_folder_id, f"VRP_{vrp_site_id}_CK_{checklist_id}")
+    base = f"{order:03d}_{uuid4().hex[:8]}.jpg"
+    drive_link = upload_bytes_to_drive(data, base, sub_folder_id)
+    drive_file_id = drive_link if drive_link else ""
+    if drive_file_id:
+        st.info(f"Link do arquivo no Google Drive salvo: {drive_file_id}")
     try:
         conn = get_conn()
         conn.execute(
@@ -58,20 +56,7 @@ def save_photo_bytes(
     except Exception as e:
         import traceback
         st.error(f"Erro ao salvar foto no banco: {e}\n\n{traceback.format_exc()}")
-        conn = get_conn()
-        conn.execute(
-            """INSERT INTO photos (vrp_site_id, checklist_id, label, file_path, drive_file_id, caption, include_in_report, display_order)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (vrp_site_id, checklist_id, label, str(p), drive_file_id, caption, int(include), order),
-        )
-        conn.commit()
-        conn.close()
-    # Nome do arquivo
-    base = f"{order:03d}_{uuid4().hex[:8]}.jpg"
-    )
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
-    return rows
+    return drive_file_id
 
 def list_photos_by_vrp(vrp_site_id: int) -> List[Dict[str, Any]]:
     conn = get_conn()
