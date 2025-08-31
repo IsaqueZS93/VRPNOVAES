@@ -45,15 +45,9 @@ PAGES = {
 
 def is_user_logged_in():
     """Verifica se o usuário está logado de forma robusta"""
-    # Verifica se as chaves existem e não são None
-    has_usuario = "usuario" in st.session_state and st.session_state["usuario"] is not None
-    has_tipo = "tipo_usuario" in st.session_state and st.session_state["tipo_usuario"] is not None
-    is_authenticated = st.session_state.get("authenticated", False)
-    
-    # Debug: mostra o estado atual (remover em produção)
-    # st.write(f"Debug - usuario: {has_usuario}, tipo: {has_tipo}, auth: {is_authenticated}")
-    
-    return has_usuario and has_tipo and is_authenticated
+    return (st.session_state.get("authenticated", False) and 
+            st.session_state.get("usuario") is not None and 
+            st.session_state.get("tipo_usuario") is not None)
 
 # Verifica se o usuário está logado
 if not is_user_logged_in():
@@ -88,30 +82,20 @@ else:
 st.sidebar.image(logo_path(), width='stretch')
 st.sidebar.title(f"VRP ({st.session_state['usuario']})")
 
-# Garante que o usuário não fique na tela de login após fazer login
-current = st.session_state.get("nav_radio", menu[0])
-
-# Se o usuário está na tela de login, redireciona para a primeira tela disponível
-if current == "Login":
-    current = menu[0]
-    st.session_state["nav_radio"] = current
-
-# Se a tela atual não está no menu permitido, redireciona para a primeira disponível
-if current not in menu:
-    current = menu[0]
-    st.session_state["nav_radio"] = current
-
-# Processa navegação programática
+# Processa navegação programática primeiro
 if st.session_state.get("nav_to") in PAGES:
     current = st.session_state.pop("nav_to")
     if current not in menu:
         current = menu[0]
     st.session_state["nav_radio"] = current
-
-# Corrige o valor do radio se não estiver no menu
-if st.session_state.get("nav_radio") not in menu:
-    st.session_state["nav_radio"] = menu[0]
-    current = menu[0]
+else:
+    # Usa a tela atual ou define uma padrão
+    current = st.session_state.get("nav_radio", menu[0])
+    
+    # Se a tela atual não está no menu permitido, redireciona para a primeira disponível
+    if current not in menu:
+        current = menu[0]
+        st.session_state["nav_radio"] = current
 st.sidebar.radio("Navegar", menu, index=menu.index(current), key="nav_radio")
 # Botão logout
 if st.sidebar.button("Logout"):
