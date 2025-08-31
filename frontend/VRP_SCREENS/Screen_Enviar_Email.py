@@ -31,12 +31,13 @@ def render():
             for f in arquivos or []:
                 anexos.append({"filename": f.name, "content": f.read()})
             try:
-                email_service(
+                ok = email_service.send_custom_email(
                     subject=titulo,
                     body=corpo,
                     to=emails,
                     attachments=anexos
                 )
-                st.success("E-mail enviado com sucesso!")
+                if ok:
+                    st.success("E-mail enviado com sucesso!")
             except Exception as e:
                 st.error(f"Erro ao enviar e-mail: {e}")

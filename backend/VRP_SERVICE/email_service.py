@@ -16,6 +16,46 @@ import streamlit as st
 from .export_paths import EXPORTS_DIR, UPLOADS_DIR
 
 class EmailService:
+    def send_custom_email(self, subject: str, body: str, to: list, attachments: list = None) -> bool:
+        """
+        Envia e-mail personalizado com anexos.
+        Args:
+            subject: Título do e-mail
+            body: Corpo do e-mail
+            to: Lista de destinatários
+            attachments: Lista de dicts {filename, content}
+        Returns:
+            bool: True se enviado com sucesso
+        """
+        if not self.is_configured():
+            st.error("Configurações de email não encontradas. Configure no arquivo .env")
+            return False
+        if not to:
+            st.error("Nenhum destinatário configurado")
+            return False
+        try:
+            config = self._get_config()
+            msg = MIMEMultipart()
+            msg['From'] = config['from_email']
+            msg['To'] = ", ".join(to)
+            msg['Subject'] = subject
+            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+            # Anexos
+            for att in attachments or []:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(att['content'])
+                encoders.encode_base64(part)
+                part.add_header('Content-Disposition', f'attachment; filename= {att['filename']}')
+                msg.attach(part)
+            with smtplib.SMTP(config['host'], config['port']) as server:
+                if config['use_tls']:
+                    server.starttls()
+                server.login(config['user'], config['password'])
+                server.send_message(msg)
+            return True
+        except Exception as e:
+            st.error(f"Erro ao enviar email: {e}")
+            return False
     def __init__(self):
         # Não carregar variáveis no __init__, carregar dinamicamente
         pass
