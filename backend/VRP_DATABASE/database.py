@@ -73,74 +73,96 @@ def init_db():
             has_bypass INTEGER DEFAULT 0,
             notes_hydraulics TEXT,
             p_up_before REAL, p_down_before REAL, p_up_after REAL, p_down_after REAL,
-            observations_general TEXT,
-            FOREIGN KEY(contractor_id) REFERENCES companies(id),
-            FOREIGN KEY(contracted_id) REFERENCES companies(id),
-            FOREIGN KEY(team_id) REFERENCES teams(id),
-            FOREIGN KEY(vrp_site_id) REFERENCES vrp_sites(id)
-        );
+            def init_db():
+                conn = get_conn()
+                conn.executescript('''
+                CREATE TABLE IF NOT EXISTS vrp_sites (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    municipality TEXT,
+                    city TEXT,
+                    place TEXT,
+                    brand TEXT,
+                    type TEXT,
+                    dn INTEGER,
+                    access_install TEXT,
+                    traffic TEXT,
+                    lids TEXT,
+                    notes_access TEXT,
+                    latitude REAL,
+                    longitude REAL,
+                    network_depth_cm REAL,
+                    has_automation INTEGER
+                );
+                CREATE TABLE IF NOT EXISTS checklists (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT,
+                    service_type TEXT,
+                    contractor_id INTEGER,
+                    contracted_id INTEGER,
+                    team_id INTEGER,
+                    vrp_site_id INTEGER,
+                    has_reg_upstream INTEGER,
+                    has_reg_downstream INTEGER,
+                    has_bypass INTEGER,
+                    notes_hydraulics TEXT,
+                    p_up_before REAL,
+                    p_down_before REAL,
+                    p_up_after REAL,
+                    p_down_after REAL,
+                    observations_general TEXT,
+                    ai_summary TEXT
+                );
+                CREATE TABLE IF NOT EXISTS reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    checklist_id INTEGER,
+                    ai_summary TEXT,
+                    docx_path TEXT,
+                    pdf_path TEXT
+                );
+                CREATE TABLE IF NOT EXISTS companies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    type TEXT
+                );
+                CREATE TABLE IF NOT EXISTS teams (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT
+                );
+                CREATE TABLE IF NOT EXISTS photos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    checklist_id INTEGER,
+                    vrp_site_id INTEGER,
+                    path TEXT,
+                    label TEXT,
+                    caption TEXT,
+                    include INTEGER,
+                    order_num INTEGER
+                );
+                CREATE TABLE IF NOT EXISTS email_destinatarios (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT UNIQUE
+                );
+                ''')
+                conn.commit()
+                conn.close()
 
-        CREATE TABLE IF NOT EXISTS photos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            checklist_id INTEGER,
-            label TEXT,
-            file_path TEXT NOT NULL,
-            caption TEXT,
-            include_in_report INTEGER DEFAULT 1,
-            display_order INTEGER DEFAULT 1,
-            created_at TEXT DEFAULT (datetime('now')),
-            -- vrp_site_id será garantido por migração abaixo (ADD COLUMN)
-            FOREIGN KEY(checklist_id) REFERENCES checklists(id) ON DELETE CASCADE
-        );
+            def add_destinatario(email: str):
+                conn = get_conn()
+                conn.execute("INSERT OR IGNORE INTO email_destinatarios (email) VALUES (?)", (email,))
+                conn.commit()
+                conn.close()
 
-        CREATE TABLE IF NOT EXISTS reports (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            checklist_id INTEGER UNIQUE,
-            ai_summary TEXT,
-            docx_path TEXT,
-            pdf_path TEXT,
-            created_at TEXT DEFAULT (datetime('now')),
-            FOREIGN KEY(checklist_id) REFERENCES checklists(id) ON DELETE CASCADE
-        );
+            def remove_destinatario(email: str):
+                conn = get_conn()
+                conn.execute("DELETE FROM email_destinatarios WHERE email=?", (email,))
+                conn.commit()
+                conn.close()
 
-        CREATE INDEX IF NOT EXISTS idx_checklists_site ON checklists(vrp_site_id);
-        CREATE INDEX IF NOT EXISTS idx_photos_checklist ON photos(checklist_id);
-        """
-    )
-
-    # --- Migração: garantir coluna vrp_site_id em photos
-    if not _column_exists(conn, "photos", "vrp_site_id"):
-        cur.execute("ALTER TABLE photos ADD COLUMN vrp_site_id INTEGER;")
-        conn.commit()
-        # preenche vrp_site_id usando o checklist vinculado (quando existir)
-        cur.execute(
-            """
-            UPDATE photos
-               SET vrp_site_id = (
-                    SELECT vrp_site_id FROM checklists
-                     WHERE checklists.id = photos.checklist_id
-               )
-             WHERE vrp_site_id IS NULL;
-            """
-        )
-        conn.commit()
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_photos_site ON photos(vrp_site_id);")
-        conn.commit()
-
-    # --- Migração: adicionar campos de localização geográfica
-    if not _column_exists(conn, "vrp_sites", "latitude"):
-        cur.execute("ALTER TABLE vrp_sites ADD COLUMN latitude REAL;")
-        conn.commit()
-    
-    if not _column_exists(conn, "vrp_sites", "longitude"):
-        cur.execute("ALTER TABLE vrp_sites ADD COLUMN longitude REAL;")
-        conn.commit()
-
-    # --- Migração: adicionar novos campos do checklist
-    if not _column_exists(conn, "vrp_sites", "network_depth_cm"):
-        cur.execute("ALTER TABLE vrp_sites ADD COLUMN network_depth_cm REAL;")
-        conn.commit()
-    
+            def listar_destinatarios():
+                conn = get_conn()
+                rows = conn.execute("SELECT email FROM email_destinatarios ORDER BY email").fetchall()
+                conn.close()
+                return [r[0] for r in rows]
     if not _column_exists(conn, "vrp_sites", "has_automation"):
         cur.execute("ALTER TABLE vrp_sites ADD COLUMN has_automation INTEGER DEFAULT 0;")
         conn.commit()
