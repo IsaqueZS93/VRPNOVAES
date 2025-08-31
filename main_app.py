@@ -44,7 +44,7 @@ PAGES = {
 }
 
 if "usuario" not in st.session_state or "tipo_usuario" not in st.session_state:
-    st.sidebar.image(logo_path(), use_container_width=True)
+    st.sidebar.image(logo_path(), width='stretch')
     st.sidebar.title("VRP")
     st.session_state["nav_radio"] = "Login"
     PAGES["Login"]()
@@ -57,7 +57,7 @@ if tipo == "ope":
     menu = telas_ope
 else:
     menu = [k for k in PAGES.keys() if k != "Login"]
-st.sidebar.image(logo_path(), use_container_width=True)
+st.sidebar.image(logo_path(), width='stretch')
 st.sidebar.title(f"VRP ({st.session_state['usuario']})")
 current = st.session_state.get("nav_radio", menu[0])
 if current not in menu:
