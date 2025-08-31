@@ -30,17 +30,12 @@ def render():
         with col2:
             if st.button("➕ Adicionar", key="add_email_btn"):
                 if new_email and "@" in new_email:
-                    # Verifica se o email já existe
-                    existing_emails = listar_destinatarios()
-                    if new_email in existing_emails:
-                        st.warning(f"Email {new_email} já está cadastrado!")
+                    success = add_destinatario(new_email)
+                    if success:
+                        st.success(f"Email {new_email} adicionado com sucesso!")
+                        st.experimental_rerun()
                     else:
-                        success = add_destinatario(new_email)
-                        if success:
-                            st.success(f"Email {new_email} adicionado com sucesso!")
-                            st.rerun()
-                        else:
-                            st.error("Erro ao adicionar email. Verifique a conexão com o banco de dados.")
+                        st.warning(f"Email {new_email} já está cadastrado ou houve erro ao salvar!")
                 else:
                     st.error("Email inválido! Digite um email válido.")
         emails = listar_destinatarios()
