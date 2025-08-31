@@ -30,7 +30,8 @@ env/
 .streamlit/
 
 # Database
-*.db
+# Removido *.db para versionar o banco de dados
+#*.db
 *.sqlite
 *.sqlite3
 
