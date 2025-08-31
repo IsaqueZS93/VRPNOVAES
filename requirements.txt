@@ -12,3 +12,4 @@ streamlit-folium
 email-validator
 requests
 PyGithub
+docx2pdf
