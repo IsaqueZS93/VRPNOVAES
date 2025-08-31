@@ -1,3 +1,18 @@
+import io
+from googleapiclient.http import MediaIoBaseUpload
+def upload_bytes_to_drive(data_bytes, filename, folder_id=None):
+    service = get_google_drive_service()
+    file_metadata = {"name": filename}
+    if folder_id:
+        file_metadata["parents"] = [folder_id]
+    media = MediaIoBaseUpload(io.BytesIO(data_bytes), mimetype="image/jpeg", resumable=True)
+    try:
+        file = service.files().create(body=file_metadata, media_body=media, fields="id, webViewLink").execute()
+        return file.get("webViewLink")
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Erro ao fazer upload para o Google Drive: {e}")
+        return None
 import os
 import streamlit as st
 import io
