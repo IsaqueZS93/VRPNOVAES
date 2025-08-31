@@ -37,21 +37,17 @@ def save_photo_bytes(
     p = folder / base
     Image.open(BytesIO(data)).convert("RGB").save(p, "JPEG", quality=90)
 
-    # Upload para Google Drive
+    # Upload para Google Drive usando Service Account
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaIoBaseUpload
-    from google.oauth2.credentials import Credentials
+    from google.oauth2.service_account import Credentials
     import io
     import streamlit as st
 
-    creds = Credentials(
-        None,
-        client_id=st.secrets["google_drive"]["client_id"],
-        client_secret=st.secrets["google_drive"]["client_secret"],
-        token_uri=st.secrets["google_drive"]["token_uri"],
-    )
+    service_account_info = dict(st.secrets["google_drive_service_account"])
+    creds = Credentials.from_service_account_info(service_account_info, scopes=["https://www.googleapis.com/auth/drive.file"])
     service = build('drive', 'v3', credentials=creds)
-    file_metadata = {'name': base, 'parents': []}  # Adicione folderId se quiser pasta específica
+    file_metadata = {'name': base}  # Adicione 'parents': [folderId] se quiser pasta específica
     media = MediaIoBaseUpload(io.BytesIO(data), mimetype='image/jpeg')
     drive_file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
     drive_file_id = drive_file.get('id')
