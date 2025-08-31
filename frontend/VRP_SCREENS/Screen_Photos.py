@@ -4,7 +4,9 @@ Salva em uploads/VRP_{site}/CK_{checklist}/ e grava vrp_site_id no DB.
 Lista para edição (incluir/ordem/legenda/rótulo) e exclusão.
 UI padronizada com header/logo, toolbar e cards.
 """
+from __future__ import annotations
 import streamlit as st
+
 from backend.VRP_DATABASE.database import get_conn
 from backend.VRP_SERVICE.storage_service import (
     save_photo_bytes, list_photos, list_photos_by_vrp,
@@ -31,7 +33,8 @@ def _get_vrp_label(site_id: int) -> str:
     conn = get_conn()
     r = conn.execute("SELECT place, city, brand, dn FROM vrp_sites WHERE id=?", (site_id,)).fetchone()
     conn.close()
-    if not r: return f"VRP #{site_id}"
+    if not r:
+        return f"VRP #{site_id}"
     return f"{r['place']} – {r['city']} • {r['brand']} DN{r['dn'] or ''}"
 
 def render():
@@ -62,7 +65,7 @@ def render():
 
     # ===== Upload =====
     with section_card("Upload de imagens", "Selecione múltiplos arquivos e defina metadados por imagem."):
-        files = st.file_uploader("Selecione imagens", type=["png","jpg","jpeg"], accept_multiple_files=True)
+        files = st.file_uploader("Selecione imagens", type=["png","jpg","jpeg","webp"], accept_multiple_files=True)
 
         if files:
             st.write("Defina os metadados **por imagem** e clique em **Salvar todas**.")
@@ -84,27 +87,39 @@ def render():
                             include=include,
                             order=int(order),
                         ))
-                submitted = st.form_submit_button("Salvar todas")
-                if submitted:
-                    count = 0
+                submitted = st.form_submit_button("Salvar todas", type="primary")
+
+            if submitted:
+                saved = 0
+                failed = 0
+                with st.status("Salvando imagens...", expanded=True) as status:
                     for m in meta:
-                        img_bytes = m["file"].getvalue()
-                        if not img_bytes or len(img_bytes) == 0:
-                            st.warning(f"Arquivo '{m['file'].name}' está vazio ou corrompido e não foi salvo.")
-                            continue
-                        save_photo_bytes(
-                            vrp_site_id=site_id,
-                            checklist_id=cid,
-                            original_name=m["file"].name,
-                            data=img_bytes,
-                            label=m["label"],
-                            caption=m["caption"],
-                            include=m["include"],
-                            order=m["order"],
-                        )
-                        count += 1
-                    st.success(f"{count} imagem(ns) salva(s) com sucesso.")
-                    st.rerun()
+                        try:
+                            data = m["file"].getvalue()
+                            if not data:
+                                st.warning(f"⚠️ {m['file'].name}: arquivo vazio/corrompido (ignorado).")
+                                failed += 1
+                                continue
+                            save_photo_bytes(
+                                vrp_site_id=site_id,
+                                checklist_id=cid,
+                                original_name=m["file"].name,
+                                data=data,
+                                label=m["label"],
+                                caption=m["caption"],
+                                include=m["include"],
+                                order=m["order"],
+                            )
+                            st.write(f"✓ {m['file'].name} salvo.")
+                            saved += 1
+                        except Exception as e:
+                            failed += 1
+                            st.exception(e)
+                    if failed == 0:
+                        status.update(state="complete", label=f"{saved} imagem(ns) salva(s).")
+                    else:
+                        status.update(state="error", label=f"{saved} salva(s), {failed} falha(s). Ver mensagens acima.")
+                st.rerun()
         else:
             st.caption("Dica: você pode arrastar e soltar os arquivos aqui.")
 
@@ -124,12 +139,18 @@ def render():
                     caption = st.text_area("Observação (para IA — não aparece no relatório)", value=r["caption"] or "", key=f"cap_{r['id']}", height=80)
                     cA, cB = st.columns(2)
                     if cA.button("Atualizar", key=f"upd_{r['id']}"):
-                        update_photo_flags(r["id"], include, int(order), caption, label)
-                        st.success("Atualizado ✓")
+                        try:
+                            update_photo_flags(r["id"], include, int(order), caption, label)
+                            st.success("Atualizado ✓")
+                        except Exception as e:
+                            st.exception(e)
                     if cB.button("Excluir", key=f"del_{r['id']}", type="secondary"):
-                        delete_photo(r["id"])
-                        st.warning("Excluído.")
-                        st.rerun()
+                        try:
+                            delete_photo(r["id"])
+                            st.warning("Excluído.")
+                            st.rerun()
+                        except Exception as e:
+                            st.exception(e)
 
     # ===== Galeria geral da VRP =====
     with section_card("Galeria da VRP (todas as coletas)"):
