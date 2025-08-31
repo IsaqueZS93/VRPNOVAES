@@ -5,8 +5,8 @@ Lista para edição (incluir/ordem/legenda/rótulo) e exclusão.
 UI padronizada com header/logo, toolbar e cards.
 """
 import streamlit as st
-from backend.VRP_DATABASE.database import get_conn
-from backend.VRP_SERVICE.storage_service import (
+from ..VRP_DATABASE.database import get_conn
+from ..VRP_SERVICE.storage_service import (
     save_photo_bytes, list_photos, list_photos_by_vrp,
     update_photo_flags, delete_photo
 )
