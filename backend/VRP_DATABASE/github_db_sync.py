@@ -12,9 +12,13 @@ def baixar_banco_github():
     """Baixa o banco de dados do GitHub e salva localmente."""
     resp = requests.get(RAW_URL)
     if resp.status_code == 200:
-        with open(DB_FILE, "wb") as f:
-            f.write(resp.content)
-        print("Banco de dados baixado do GitHub!")
+        # Verifica se o arquivo baixado tem tamanho mínimo (SQLite > 0.5KB)
+        if len(resp.content) > 512:
+            with open(DB_FILE, "wb") as f:
+                f.write(resp.content)
+            print("Banco de dados baixado do GitHub!")
+        else:
+            print("Banco baixado do GitHub está vazio ou corrompido. Mantendo banco local.")
     else:
         print(f"Erro ao baixar banco: {resp.status_code}")
 
