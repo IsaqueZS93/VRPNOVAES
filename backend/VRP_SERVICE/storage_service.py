@@ -31,20 +31,39 @@ def save_photo_bytes(
     order: int = 1,
 ) -> str:
     """Salva bytes como JPG único e grava em 'photos'. Retorna caminho salvo."""
+    # Salva localmente (opcional, pode remover)
     folder = _vrp_ck_dir(vrp_site_id, checklist_id)
-    # nome único: ordem_label_uuid.jpg
     base = f"{order:03d}_{uuid4().hex[:8]}.jpg"
     p = folder / base
     Image.open(BytesIO(data)).convert("RGB").save(p, "JPEG", quality=90)
 
+    # Upload para Google Drive
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseUpload
+    from google.oauth2.credentials import Credentials
+    import io
+    import streamlit as st
+
+    creds = Credentials(
+        None,
+        client_id=st.secrets["google_drive"]["client_id"],
+        client_secret=st.secrets["google_drive"]["client_secret"],
+        token_uri=st.secrets["google_drive"]["token_uri"],
+    )
+    service = build('drive', 'v3', credentials=creds)
+    file_metadata = {'name': base, 'parents': []}  # Adicione folderId se quiser pasta específica
+    media = MediaIoBaseUpload(io.BytesIO(data), mimetype='image/jpeg')
+    drive_file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+    drive_file_id = drive_file.get('id')
+
     conn = get_conn()
     conn.execute(
-        """INSERT INTO photos (vrp_site_id, checklist_id, label, file_path, caption, include_in_report, display_order)
-           VALUES (?,?,?,?,?,?,?)""",
-        (vrp_site_id, checklist_id, label, str(p), caption, int(include), order),
+        """INSERT INTO photos (vrp_site_id, checklist_id, label, file_path, drive_file_id, caption, include_in_report, display_order)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (vrp_site_id, checklist_id, label, str(p), drive_file_id, caption, int(include), order),
     )
     conn.commit(); conn.close()
-    return str(p)
+    return drive_file_id
 
 def list_photos(checklist_id: int) -> List[Dict[str, Any]]:
     conn = get_conn()

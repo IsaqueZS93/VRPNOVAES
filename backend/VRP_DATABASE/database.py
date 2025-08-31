@@ -89,12 +89,17 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             checklist_id INTEGER,
             vrp_site_id INTEGER,
-            path TEXT,
+            file_path TEXT,
+            drive_file_id TEXT,
             label TEXT,
             caption TEXT,
-            include INTEGER,
-            order_num INTEGER
+            include_in_report INTEGER,
+            display_order INTEGER
         );
+    # Migração: adiciona coluna drive_file_id se não existir
+    if not _column_exists(conn, "photos", "drive_file_id"):
+        cur.execute("ALTER TABLE photos ADD COLUMN drive_file_id TEXT;")
+        conn.commit()
 
         CREATE TABLE IF NOT EXISTS email_destinatarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
