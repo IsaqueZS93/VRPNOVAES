@@ -54,7 +54,11 @@ def save_photo_bytes(
     sub_folder_id = create_subfolder(main_folder_id, f"VRP_{vrp_site_id}_CK_{checklist_id}")
     drive_link = upload_file_to_drive(str(p), sub_folder_id)
     # Salva link público no banco
+
     drive_file_id = drive_link if drive_link else ""
+    import streamlit as st
+    if drive_file_id:
+        st.info(f"Link do arquivo no Google Drive salvo: {drive_file_id}")
 
     try:
         conn = get_conn()
