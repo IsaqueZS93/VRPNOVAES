@@ -36,6 +36,7 @@ def save_photo_bytes(
     base = f"{order:03d}_{uuid4().hex[:8]}.jpg"
     p = folder / base
     import streamlit as st
+    st.info(f"Salvando imagem em: {p}")
     if not data or len(data) == 0:
         st.error("Nenhum dado de imagem recebido. O arquivo pode estar vazio ou corrompido.")
         return ""
