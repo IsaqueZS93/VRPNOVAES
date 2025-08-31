@@ -5,17 +5,13 @@ Usado por toda a aplicação para evitar 'caminhos mágicos' espalhados.
 """
 from pathlib import Path
 
-ROOT = Path(r"C:\Users\Novaes Engenharia\github - deploy\VRP").resolve()
 
-BACKEND = ROOT / "backend"
-from pathlib import Path
-
-from ..VRP_DATABASE.database import get_conn
+# Paths relativos para compatibilidade universal
+BACKEND = Path("backend")
 DB_DIR = BACKEND / "VRP_DATABASE"
 DB_PATH = DB_DIR / "vrp.db"
-
 TEMPLATES_DIR = BACKEND / "VRP_SERVICE" / "templates"
-FRONTEND = ROOT / "frontend"
+FRONTEND = Path("frontend")
 LOGOS_DIR = FRONTEND / "assets" / "logos"
 UPLOADS_DIR = FRONTEND / "assets" / "uploads"
 EXPORTS_DIR = FRONTEND / "assets" / "exports"
