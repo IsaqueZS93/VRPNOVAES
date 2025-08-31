@@ -107,3 +107,49 @@ def init_db():
         conn.commit()
 
     conn.close()
+
+
+def add_destinatario(email: str) -> bool:
+    """Adiciona um novo destinatário de email"""
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO email_destinatarios (email) VALUES (?)", (email,))
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.IntegrityError:
+        # Email já existe
+        conn.close()
+        return False
+    except Exception:
+        conn.close()
+        return False
+
+
+def remove_destinatario(email: str) -> bool:
+    """Remove um destinatário de email"""
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM email_destinatarios WHERE email = ?", (email,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        conn.close()
+        return False
+
+
+def listar_destinatarios() -> list:
+    """Lista todos os destinatários de email"""
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT email FROM email_destinatarios ORDER BY email")
+        emails = [row["email"] for row in cur.fetchall()]
+        conn.close()
+        return emails
+    except Exception:
+        conn.close()
+        return []

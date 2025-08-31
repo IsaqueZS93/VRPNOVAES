@@ -60,7 +60,7 @@ def is_user_logged_in():
 
 # Verifica se o usuário está logado
 if not is_user_logged_in():
-    st.sidebar.image(logo_path(), width='stretch')
+    st.sidebar.image(logo_path(), width=200)
     st.sidebar.title("VRP")
     Screen_Login.render()
     st.stop()
@@ -74,7 +74,7 @@ if tipo == "ope":
 else:
     menu = list(PAGES.keys())
 
-st.sidebar.image(logo_path(), width='stretch')
+st.sidebar.image(logo_path(), width=200)
 st.sidebar.title(f"VRP ({st.session_state['usuario']})")
 
 
