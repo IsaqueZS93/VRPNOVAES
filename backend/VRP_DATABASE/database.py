@@ -122,7 +122,9 @@ def add_destinatario(email: str) -> bool:
         # Email já existe
         conn.close()
         return False
-    except Exception:
+    except Exception as e:
+        # Log do erro para debug
+        print(f"Erro ao adicionar email {email}: {e}")
         conn.close()
         return False
 

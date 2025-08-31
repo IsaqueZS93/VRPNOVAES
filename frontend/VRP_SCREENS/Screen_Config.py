@@ -30,11 +30,19 @@ def render():
         with col2:
             if st.button("➕ Adicionar", key="add_email_btn"):
                 if new_email and "@" in new_email:
-                    add_destinatario(new_email)
-                    st.success(f"Email {new_email} adicionado!")
-                    st.rerun()
+                    # Verifica se o email já existe
+                    existing_emails = listar_destinatarios()
+                    if new_email in existing_emails:
+                        st.warning(f"Email {new_email} já está cadastrado!")
+                    else:
+                        success = add_destinatario(new_email)
+                        if success:
+                            st.success(f"Email {new_email} adicionado com sucesso!")
+                            st.rerun()
+                        else:
+                            st.error("Erro ao adicionar email. Verifique a conexão com o banco de dados.")
                 else:
-                    st.error("Email inválido!")
+                    st.error("Email inválido! Digite um email válido.")
         emails = listar_destinatarios()
         if emails:
             st.write("**Emails configurados:**")
@@ -44,9 +52,12 @@ def render():
                     st.write(f"📧 {email}")
                 with col2:
                     if st.button("🗑️", key=f"remove_{email}"):
-                        remove_destinatario(email)
-                        st.success(f"Email {email} removido!")
-                        st.rerun()
+                        success = remove_destinatario(email)
+                        if success:
+                            st.success(f"Email {email} removido com sucesso!")
+                            st.rerun()
+                        else:
+                            st.error(f"Erro ao remover email {email}")
         else:
             st.info("Nenhum email configurado. Adicione emails para receber relatórios automaticamente.")
         
