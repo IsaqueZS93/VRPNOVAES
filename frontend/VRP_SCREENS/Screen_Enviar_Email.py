@@ -11,17 +11,17 @@ from backend.VRP_SERVICE.email_service import email_service
 
 def render():
     st.title("Enviar E-mail com Anexo")
+    emails_validos = st.secrets["infoemails"]["EMAILS"].replace(" ","").split(",")
     with st.form("email_form"):
         titulo = st.text_input("Título do E-mail")
         corpo = st.text_area("Corpo do E-mail", height=150)
-        destinatarios = st.text_input("Destinatários (separe por vírgula)", help="Exemplo: email1@dominio.com, email2@dominio.com")
+        destinatarios = st.multiselect("Destinatários", options=emails_validos, help="Selecione um ou mais e-mails para envio.")
         arquivos = st.file_uploader("Anexar arquivos", accept_multiple_files=True)
         enviar = st.form_submit_button("Enviar E-mail")
 
     if enviar:
-        emails = [e.strip() for e in destinatarios.split(",") if e.strip()]
-        if not emails:
-            st.error("Informe ao menos um destinatário.")
+        if not destinatarios:
+            st.error("Selecione ao menos um destinatário.")
         elif not titulo:
             st.error("Informe o título do e-mail.")
         elif not corpo:
@@ -34,7 +34,7 @@ def render():
                 ok = email_service.send_custom_email(
                     subject=titulo,
                     body=corpo,
-                    to=emails,
+                    to=destinatarios,
                     attachments=anexos
                 )
                 if ok:
