@@ -31,7 +31,6 @@ init_db()
 st.set_page_config(page_title="VRP - Relatórios", layout="wide")
 
 PAGES = {
-    "Login": Screen_Login.render,
     "Checklist":  Screen_Checklist_Form.render,
     "Fotos":      Screen_Photos.render,
     "Histórico":  Screen_Historico.render,
@@ -63,8 +62,7 @@ def is_user_logged_in():
 if not is_user_logged_in():
     st.sidebar.image(logo_path(), width='stretch')
     st.sidebar.title("VRP")
-    st.session_state["nav_radio"] = "Login"
-    PAGES["Login"]()
+    Screen_Login.render()
     st.stop()
 
 # Usuário está logado, prossegue com a aplicação
@@ -74,20 +72,12 @@ telas_ope = ["Checklist", "Fotos", "Histórico", "Galeria VRP", "Mapa VRP", "Tut
 if tipo == "ope":
     menu = telas_ope
 else:
-    menu = [k for k in PAGES.keys() if k != "Login"]
+    menu = list(PAGES.keys())
 
 st.sidebar.image(logo_path(), width='stretch')
 st.sidebar.title(f"VRP ({st.session_state['usuario']})")
 
-# Garante que o usuário autenticado não seja redirecionado para login
-if st.session_state.get("nav_radio") == "Login":
-    # Redireciona para a primeira tela disponível
-    if tipo == "ope":
-        st.session_state["nav_radio"] = telas_ope[0]
-    else:
-        menu_disponivel = [k for k in PAGES.keys() if k != "Login"]
-        st.session_state["nav_radio"] = menu_disponivel[0]
-    st.rerun()
+
 
 # Processa navegação programática primeiro
 if st.session_state.get("nav_to") in PAGES:

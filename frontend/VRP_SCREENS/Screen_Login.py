@@ -49,6 +49,5 @@ def logout():
     st.session_state.pop("authenticated", None)
     st.session_state.pop("nav_radio", None)
     st.session_state.pop("nav_to", None)
-    # Força o redirecionamento para a tela de login
-    st.session_state["nav_radio"] = "Login"
+    # Não define nav_radio como "Login" - deixa o sistema detectar automaticamente
     st.rerun()
