@@ -69,13 +69,35 @@ def render():
 
     # export
     with section_card("Exportação"):
+        # Opções de pasta padrão e personalizada
+        opcoes_pasta = ["backend/VRP_DATABASE/exports", "frontend/assets/exports", "Personalizar..."]
+        escolha_pasta = st.selectbox("Escolha o local para salvar os arquivos", opcoes_pasta, index=0)
+        pasta_destino = escolha_pasta
+        if escolha_pasta == "Personalizar...":
+            pasta_destino = st.text_input("Informe o caminho completo da pasta de destino:", value="backend/VRP_DATABASE/exports")
+
+
         if actions["Exportar DOCX/PDF"]:
             ai_text = (st.session_state.get("ai_text") or _get_saved_ai_text(cid) or generate_ai_summary(cid))
-            docx, pdf = generate_full_report(cid, ai_text)
+            docx, pdf = generate_full_report(cid, ai_text, pasta_destino)
             st.success("Relatório exportado.")
-            st.markdown(f"**DOCX:**  `{docx}`")
+            # Download DOCX
+            with open(docx, "rb") as f:
+                st.download_button(
+                    label="Baixar DOCX",
+                    data=f.read(),
+                    file_name=f"Relatorio_VRP_{cid}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+            # Download PDF
             if pdf:
-                st.markdown(f"**PDF:**   `{pdf}`")
+                with open(pdf, "rb") as f:
+                    st.download_button(
+                        label="Baixar PDF",
+                        data=f.read(),
+                        file_name=f"Relatorio_VRP_{cid}.pdf",
+                        mime="application/pdf"
+                    )
             else:
                 st.warning("PDF não gerado. O PDF depende do Microsoft Word + biblioteca `docx2pdf` instalados no Windows.")
 

@@ -10,3 +10,5 @@ groq
 folium
 streamlit-folium
 email-validator
+requests
+PyGithub

@@ -7,6 +7,7 @@ import streamlit as st
 import os
 from dotenv import load_dotenv
 from backend.VRP_DATABASE.database import init_db
+from backend.VRP_DATABASE.github_db_sync import baixar_banco_github, subir_banco_github
 from frontend.VRP_SCREENS import (
     Screen_Checklist_Form, Screen_Photos, Screen_Historico, Screen_Galeria_VRP, Screen_Relatorio, Screen_Config
 )
@@ -14,8 +15,12 @@ from frontend.VRP_SCREENS.SCREEN_VRP_TUTORIAL import render as Screen_VRP_Tutori
 from frontend.VRP_SCREENS.Screen_Mapa_VRP import render as Screen_Mapa_VRP
 from frontend.VRP_STYLES.brand import logo_path
 
+
 # Carregar variáveis de ambiente
 load_dotenv()
+
+# Baixar banco do GitHub ao iniciar
+baixar_banco_github()
 
 st.set_page_config(page_title="VRP - Relatórios", layout="wide")
 init_db()
@@ -42,7 +47,12 @@ if st.session_state.get("nav_to") in PAGES:
     current = st.session_state.pop("nav_to")
 st.sidebar.radio("Navegar", page_names, index=page_names.index(current), key="nav_radio")
 
+
 # render
 PAGES[st.session_state["nav_radio"]]()
 st.sidebar.markdown("---")
 st.sidebar.write("Checklist atual:", st.session_state.get("current_checklist_id","—"))
+
+# Subir banco para o GitHub ao finalizar (pode ser ajustado para eventos específicos)
+import atexit
+atexit.register(subir_banco_github)

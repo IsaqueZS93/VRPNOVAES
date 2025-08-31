@@ -153,9 +153,12 @@ def _add_intro_and_table(doc: Document):
     _style_table(table)
 
 # ---------- DOCX ----------
-def build_docx(checklist_id: int, ai_text: str) -> Path:
+def build_docx(checklist_id: int, ai_text: str, pasta_destino: str = None) -> Path:
     ck, site, photos = _fetch_all(checklist_id)
-    export_folder = EXPORTS_DIR / f"{checklist_id}"
+    if pasta_destino:
+        export_folder = Path(pasta_destino) / f"{checklist_id}"
+    else:
+        export_folder = EXPORTS_DIR / f"{checklist_id}"
     export_folder.mkdir(parents=True, exist_ok=True)
     fname = export_folder / f"Relatorio_VRP_{checklist_id}.docx"
 
@@ -275,8 +278,8 @@ def convert_to_pdf(docx_path: Path) -> Path | None:
     except Exception:
         return None
 
-def generate_full_report(checklist_id: int, ai_text: str) -> Tuple[str, str | None]:
-    docx_path = build_docx(checklist_id, ai_text)
+def generate_full_report(checklist_id: int, ai_text: str, pasta_destino: str = None) -> Tuple[str, str | None]:
+    docx_path = build_docx(checklist_id, ai_text, pasta_destino)
     pdf_path = convert_to_pdf(docx_path)
 
     conn = get_conn()
