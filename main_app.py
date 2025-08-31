@@ -19,11 +19,14 @@ from frontend.VRP_STYLES.brand import logo_path
 # Carregar variáveis de ambiente
 load_dotenv()
 
+
 # Baixar banco do GitHub ao iniciar
 baixar_banco_github()
 
-st.set_page_config(page_title="VRP - Relatórios", layout="wide")
+# Garante que as tabelas existem após baixar o banco
 init_db()
+
+st.set_page_config(page_title="VRP - Relatórios", layout="wide")
 
 PAGES = {
     "Checklist":  Screen_Checklist_Form.render,
