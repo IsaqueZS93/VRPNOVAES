@@ -105,61 +105,46 @@ def render():
 
     # Envio por Email
     with section_card("📧 Enviar por Email"):
-        # Verificar se há emails configurados
-        recipients = email_service.get_emails_from_session()
-        config_status = email_service.get_config_status()
-        
-        if not config_status["configured"]:
-            st.warning("⚠️ Configurações de email não encontradas!")
-            st.info("Configure o email na tela **Configurações** para enviar relatórios automaticamente.")
-        elif not recipients:
-            st.info("ℹ️ Nenhum destinatário configurado.")
-            st.info("Adicione emails na tela **Configurações** para receber relatórios automaticamente.")
+        emails_validos = st.secrets["infoemails"]["EMAILS"].replace(" ","").split(",")
+        if not emails_validos or emails_validos == ['']:
+            st.info("ℹ️ Nenhum destinatário disponível. Configure os emails no secrets.")
         else:
-            st.success(f"✅ {len(recipients)} destinatário(s) configurado(s)")
-            
-            # Mostrar destinatários
-            st.write("**Destinatários:**")
-            for email in recipients:
-                st.write(f"📧 {email}")
-            
-            # Botão para enviar
-            if st.button("📤 Enviar Relatório por Email", type="primary"):
-                with st.spinner("Enviando relatório por email..."):
-                    # Obter caminhos dos arquivos
-                    docx_path = ""
-                    pdf_path = ""
-                    
-                    # Buscar relatórios existentes
-                    conn = get_conn()
-                    report_row = conn.execute("""
-                        SELECT docx_path, pdf_path FROM reports WHERE checklist_id = ?
-                    """, (cid,)).fetchone()
-                    conn.close()
-                    
-                    if report_row:
-                        docx_path = report_row["docx_path"] or ""
-                        pdf_path = report_row["pdf_path"] or ""
-                    
-                    # Se não há relatório, gerar primeiro
-                    if not docx_path:
-                        ai_text = (st.session_state.get("ai_text") or _get_saved_ai_text(cid) or generate_ai_summary(cid))
-                        docx_path, pdf_path = generate_full_report(cid, ai_text)
-                        st.success("Relatório gerado automaticamente para envio.")
-                    
-                    # Obter fotos
-                    photos_paths = _get_photos_paths(cid)
-                    
-                    # Enviar email
-                    success = email_service.send_report_email(
-                        checklist_id=cid,
-                        report_path=docx_path,
-                        photos_paths=photos_paths,
-                        recipients=recipients
-                    )
-                    
-                    if success:
-                        st.success("✅ Relatório enviado com sucesso!")
-                        st.info(f"📧 Enviado para {len(recipients)} destinatário(s)")
-                    else:
-                        st.error("❌ Falha ao enviar relatório. Verifique as configurações de email.")
+            destinatarios = st.multiselect("Selecione os destinatários para envio do relatório:", options=emails_validos, help="Selecione um ou mais e-mails.")
+            if not destinatarios:
+                st.info("Selecione ao menos um destinatário para enviar o relatório.")
+            else:
+                st.success(f"✅ {len(destinatarios)} destinatário(s) selecionado(s)")
+                # Botão para enviar
+                if st.button("📤 Enviar Relatório por Email", type="primary"):
+                    with st.spinner("Enviando relatório por email..."):
+                        # Obter caminhos dos arquivos
+                        docx_path = ""
+                        pdf_path = ""
+                        # Buscar relatórios existentes
+                        conn = get_conn()
+                        report_row = conn.execute("""
+                            SELECT docx_path, pdf_path FROM reports WHERE checklist_id = ?
+                        """, (cid,)).fetchone()
+                        conn.close()
+                        if report_row:
+                            docx_path = report_row["docx_path"] or ""
+                            pdf_path = report_row["pdf_path"] or ""
+                        # Se não há relatório, gerar primeiro
+                        if not docx_path:
+                            ai_text = (st.session_state.get("ai_text") or _get_saved_ai_text(cid) or generate_ai_summary(cid))
+                            docx_path, pdf_path = generate_full_report(cid, ai_text)
+                            st.success("Relatório gerado automaticamente para envio.")
+                        # Obter fotos
+                        photos_paths = _get_photos_paths(cid)
+                        # Enviar email
+                        success = email_service.send_report_email(
+                            checklist_id=cid,
+                            report_path=docx_path,
+                            photos_paths=photos_paths,
+                            recipients=destinatarios
+                        )
+                        if success:
+                            st.success("✅ Relatório enviado com sucesso!")
+                            st.info(f"📧 Enviado para {len(destinatarios)} destinatário(s)")
+                        else:
+                            st.error("❌ Falha ao enviar relatório. Verifique as configurações de email.")
