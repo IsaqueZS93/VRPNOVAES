@@ -26,49 +26,15 @@ def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
 
 
 def init_db():
-    # MIGRAÇÃO ROBUSTA DA TABELA PHOTOS
-    # 1. Verifica se a tabela photos existe e tem colunas antigas
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='photos';")
-    if cur.fetchone():
-        # Verifica se tem colunas antigas
-        cur.execute("PRAGMA table_info(photos);")
-        cols = [r[1] for r in cur.fetchall()]
-        if "path" in cols or "include" in cols or "order_num" in cols:
-            # Cria tabela temporária com novo schema
-            cur.executescript("""
-                CREATE TABLE IF NOT EXISTS photos_temp (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    checklist_id INTEGER,
-                    vrp_site_id INTEGER,
-                    file_path TEXT,
-                    drive_file_id TEXT,
-                    label TEXT,
-                    caption TEXT,
-                    include_in_report INTEGER,
-                    display_order INTEGER
-                );
-            """)
-            # Copia dados ajustando nomes
-            cur.execute("INSERT INTO photos_temp (id, checklist_id, vrp_site_id, file_path, label, caption, include_in_report, display_order) SELECT id, checklist_id, vrp_site_id, path, label, caption, include, order_num FROM photos;")
-            # Remove tabela antiga
-            cur.execute("DROP TABLE photos;")
-            # Renomeia tabela nova
-            cur.execute("ALTER TABLE photos_temp RENAME TO photos;")
-            conn.commit()
     conn = get_conn()
     cur = conn.cursor()
 
-    # --- Tabelas base
-    cur.executescript(
     # MIGRAÇÃO ROBUSTA DA TABELA PHOTOS
-    cur = conn.cursor()  # Certifica que o cursor está inicializado
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='photos';")
     if cur.fetchone():
-        # Verifica se tem colunas antigas
         cur.execute("PRAGMA table_info(photos);")
         cols = [r[1] for r in cur.fetchall()]
         if "path" in cols or "include" in cols or "order_num" in cols:
-            # Cria tabela temporária com novo schema
             cur.executescript("""
                 CREATE TABLE IF NOT EXISTS photos_temp (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,13 +48,13 @@ def init_db():
                     display_order INTEGER
                 );
             """)
-            # Copia dados ajustando nomes
             cur.execute("INSERT INTO photos_temp (id, checklist_id, vrp_site_id, file_path, label, caption, include_in_report, display_order) SELECT id, checklist_id, vrp_site_id, path, label, caption, include, order_num FROM photos;")
-            # Remove tabela antiga
             cur.execute("DROP TABLE photos;")
-            # Renomeia tabela nova
             cur.execute("ALTER TABLE photos_temp RENAME TO photos;")
             conn.commit()
+
+    # --- Tabelas base ---
+    cur.executescript(
         """
         CREATE TABLE IF NOT EXISTS companies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -154,10 +120,6 @@ def init_db():
             include_in_report INTEGER,
             display_order INTEGER
         );
-    # Migração: adiciona coluna drive_file_id se não existir
-    if not _column_exists(conn, "photos", "drive_file_id"):
-        cur.execute("ALTER TABLE photos ADD COLUMN drive_file_id TEXT;")
-        conn.commit()
 
         CREATE TABLE IF NOT EXISTS email_destinatarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
