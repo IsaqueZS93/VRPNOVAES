@@ -51,5 +51,14 @@ def upload_file_to_drive(file_path, folder_id=None):
     if folder_id:
         file_metadata["parents"] = [folder_id]
     media = MediaFileUpload(file_path, resumable=True)
-    file = service.files().create(body=file_metadata, media_body=media, fields="id, webViewLink").execute()
-    return file.get("webViewLink")
+    try:
+        file = service.files().create(body=file_metadata, media_body=media, fields="id, webViewLink").execute()
+        return file.get("webViewLink")
+    except Exception as e:
+        import traceback
+        from googleapiclient.errors import HttpError
+        if isinstance(e, HttpError):
+            st.error(f"Erro ao fazer upload para o Google Drive: {e}\n\nDetalhes: {e.content}")
+        else:
+            st.error(f"Erro inesperado ao fazer upload para o Google Drive: {e}\n\n{traceback.format_exc()}")
+        return None
