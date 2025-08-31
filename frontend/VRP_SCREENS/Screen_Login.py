@@ -23,6 +23,14 @@ def render():
             if senha == senhas[idx]:
                 st.session_state["usuario"] = usuario
                 st.session_state["tipo_usuario"] = tipos[idx]
+                # Após login, direciona para tela inicial do menu
+                from main_app import PAGES
+                tipo = tipos[idx].lower()
+                telas_ope = ["Checklist", "Fotos", "Histórico", "Galeria VRP", "Mapa VRP", "Tutorial VRP"]
+                if tipo == "ope":
+                    st.session_state["nav_radio"] = telas_ope[0]
+                else:
+                    st.session_state["nav_radio"] = [k for k in PAGES.keys() if k != "Login"][0]
                 st.success(f"Bem-vindo, {usuario}!")
                 st.rerun()
             else:
