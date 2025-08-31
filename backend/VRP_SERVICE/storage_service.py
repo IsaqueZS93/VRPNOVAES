@@ -57,9 +57,6 @@ def save_photo_bytes(
 
     drive_file_id = drive_link if drive_link else ""
     import streamlit as st
-    if drive_file_id:
-        st.info(f"Link do arquivo no Google Drive salvo: {drive_file_id}")
-
     try:
         conn = get_conn()
         conn.execute(
@@ -69,17 +66,8 @@ def save_photo_bytes(
         )
         conn.commit()
         conn.close()
-    except Exception as e:
-        import streamlit as st
-        import traceback
-        st.error(f"Erro ao salvar foto no banco: {e}\n\n{traceback.format_exc()}")
-    return drive_file_id
-
-def list_photos(checklist_id: int) -> List[Dict[str, Any]]:
-    conn = get_conn()
-    cur = conn.execute(
-        "SELECT * FROM photos WHERE checklist_id=? ORDER BY display_order, id",
-        (checklist_id,),
+    # Nome do arquivo
+    base = f"{order:03d}_{uuid4().hex[:8]}.jpg"
     )
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
