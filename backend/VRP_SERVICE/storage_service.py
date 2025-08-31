@@ -40,7 +40,7 @@ def _safe_name(original_name: str, order: int) -> str:
     if ext.lower() not in [".jpg", ".jpeg", ".png", ".webp"]:
         ext = ".jpg"  # fallback
     h = uuid4().hex[:8]
-    return f"{order:03d}_{name or 'img'}_{h}{ext.lower()}"
+    return f"{order:03d}_{(name or 'img')[:40]}_{h}{ext.lower()}"
 
 def _ensure_drive_column():
     """Garante a existência da coluna drive_file_id em photos (se não existir)."""
@@ -77,48 +77,75 @@ def save_photo_bytes(
     if not data:
         raise ValueError("Nenhum dado de imagem recebido.")
 
-    # 1) Caminho local
+    # 1) Caminho local (sempre)
     folder = _vrp_ck_dir(vrp_site_id, checklist_id)
     filename = _safe_name(original_name, order)
     local_path = folder / filename
-    local_path.write_bytes(data)  # salva local SEM depender de PIL
+    try:
+        local_path.write_bytes(data)  # salva local SEM depender de PIL
+    except Exception as e:
+        # falha em disco precisa ser explícita
+        raise RuntimeError(f"Falha ao salvar arquivo local '{local_path}': {e}")
 
-    # 2) (Opcional) Google Drive
+    # 2) (Opcional) Google Drive — dentro do root_folder_id (se configurado) ou Shared Drive
     drive_file_id: Optional[str] = None
     if _HAS_DRIVE and _drive is not None:
         try:
-            main_folder_id = _drive.create_folder("VRP_Fotos")
-            sub_folder_id = _drive.create_subfolder(main_folder_id, f"VRP_{vrp_site_id}_CK_{checklist_id}")
+            # tenta usar root_folder do secrets; senão cai para create_folder em Shared Drive
+            base_parent = None
+            if hasattr(_drive, "get_root_folder_id"):
+                base_parent = _drive.get_root_folder_id()
+            if not base_parent and hasattr(_drive, "get_shared_drive_id"):
+                # não usamos diretamente a Shared Drive como pai sem pasta; create_folder cuida disso
+                base_parent = _drive.get_shared_drive_id()
+
+            # cria/obtém pasta "VRP_Fotos" no parent configurado
+            if base_parent and hasattr(_drive, "create_subfolder"):
+                main_folder_id = _drive.create_subfolder(base_parent, "VRP_Fotos")
+            else:
+                # fallback: procura/cria "VRP_Fotos" no escopo padrão
+                main_folder_id = _drive.create_folder("VRP_Fotos")
+
+            # subpasta específica da coleta
+            sub_folder_name = f"VRP_{vrp_site_id}_CK_{checklist_id}"
+            if hasattr(_drive, "create_subfolder"):
+                sub_folder_id = _drive.create_subfolder(main_folder_id, sub_folder_name)
+            else:
+                sub_folder_id = main_folder_id  # melhor do que falhar
+
+            # upload do binário
             link_or_id = _drive.upload_bytes_to_drive(data, filename, sub_folder_id)
             drive_file_id = str(link_or_id) if link_or_id else None
         except Exception:
-            drive_file_id = None  # não quebra o fluxo
+            # não quebra o fluxo: seguimos só com o local_path
+            drive_file_id = None
 
     # 3) Garantir coluna drive_file_id (bancos antigos)
     _ensure_drive_column()
 
     # 4) Inserir no DB
     conn = get_conn()
-    cur = conn.execute(
-        """
-        INSERT INTO photos (vrp_site_id, checklist_id, file_path, label, caption, include_in_report, display_order, drive_file_id)
-        VALUES (?,?,?,?,?,?,?,?)
-        """,
-        (
-            vrp_site_id,
-            checklist_id,
-            str(local_path),
-            label,
-            caption,
-            int(bool(include)),
-            int(order),
-            drive_file_id,
-        ),
-    )
-    conn.commit()
-    pid = cur.lastrowid
-    conn.close()
-    return pid
+    try:
+        cur = conn.execute(
+            """
+            INSERT INTO photos (vrp_site_id, checklist_id, file_path, label, caption, include_in_report, display_order, drive_file_id)
+            VALUES (?,?,?,?,?,?,?,?)
+            """,
+            (
+                vrp_site_id,
+                checklist_id,
+                str(local_path),
+                label,
+                caption,
+                int(bool(include)),
+                int(order),
+                drive_file_id,
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
 
 
 def list_photos(checklist_id: int) -> List[Dict[str, Any]]:
@@ -193,7 +220,14 @@ def delete_photo(photo_id: int) -> bool:
                 pass
 
             # (Opcional) exclui do Drive
-            drive_id = row["drive_file_id"] if "drive_file_id" in row.keys() else None
+            drive_id = None
+            # sqlite3.Row tem .keys(); se faltar a coluna em DB antigo, tratamos como None
+            try:
+                if "drive_file_id" in row.keys():
+                    drive_id = row["drive_file_id"]
+            except Exception:
+                drive_id = row["drive_file_id"] if "drive_file_id" in row else None
+
             if _HAS_DRIVE and _drive is not None and drive_id:
                 try:
                     if hasattr(_drive, "delete_from_drive"):
