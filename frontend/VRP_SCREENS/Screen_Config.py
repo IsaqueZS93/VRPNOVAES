@@ -49,10 +49,9 @@ def render():
                         st.rerun()
         else:
             st.info("Nenhum email configurado. Adicione emails para receber relatórios automaticamente.")
-            st.info("Nenhum email configurado. Adicione emails para receber relatórios automaticamente.")
         
         # Teste de email
-        if current_emails and config_status["configured"]:
+        if emails and config_status["configured"]:
             st.markdown("---")
             if st.button("🧪 Testar Configuração de Email", type="secondary"):
                 with st.spinner("Enviando email de teste..."):
@@ -61,7 +60,7 @@ def render():
                         checklist_id=999,
                         report_path="",
                         photos_paths=[],
-                        recipients=current_emails
+                        recipients=emails
                     )
                     if test_success:
                         st.success("✅ Email de teste enviado com sucesso!")
