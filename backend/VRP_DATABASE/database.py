@@ -73,6 +73,35 @@ def init_db():
             has_bypass INTEGER DEFAULT 0,
             notes_hydraulics TEXT,
             p_up_before REAL, p_down_before REAL, p_up_after REAL, p_down_after REAL,
+            observations_general TEXT,
+            ai_summary TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            checklist_id INTEGER,
+            ai_summary TEXT,
+            docx_path TEXT,
+            pdf_path TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS photos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            checklist_id INTEGER,
+            vrp_site_id INTEGER,
+            path TEXT,
+            label TEXT,
+            caption TEXT,
+            include INTEGER,
+            order_num INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS email_destinatarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE
+        );
+        """
+    )
     if not _column_exists(conn, "vrp_sites", "has_automation"):
         cur.execute("ALTER TABLE vrp_sites ADD COLUMN has_automation INTEGER DEFAULT 0;")
         conn.commit()
