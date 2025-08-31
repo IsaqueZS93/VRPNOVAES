@@ -38,7 +38,7 @@ def save_photo_bytes(
     Image.open(BytesIO(data)).convert("RGB").save(p, "JPEG", quality=90)
 
     # Upload para Google Drive usando Service_Google_Drive
-    from backend.services.Service_Google_Drive import get_google_drive_service, create_folder, create_subfolder, upload_file_to_drive
+    from .service_google_drive import get_google_drive_service, create_folder, create_subfolder, upload_file_to_drive
     service = get_google_drive_service()
     main_folder_id = create_folder("VRP_Fotos")
     sub_folder_id = create_subfolder(main_folder_id, f"VRP_{vrp_site_id}_CK_{checklist_id}")
