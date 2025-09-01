@@ -276,4 +276,3 @@ def render():
             st.text_area("Saída de logs", value="\n".join(st.session_state["photo_logs"]), height=220)
         else:
             st.caption("Sem logs nesta sessão. As ações realizadas serão registradas aqui.")
-# ------------------------ Fim ------------------------
