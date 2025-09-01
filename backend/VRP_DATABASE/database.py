@@ -1,3 +1,4 @@
+# file: backend/VRP_DATABASE/database.py
 """
 SQLite + criação/migração do schema.
 - get_conn(): conexão
@@ -11,11 +12,17 @@ try:
 except Exception:
     DB_PATH = Path(__file__).resolve().parents[1] / "VRP_DATABASE" / "vrp.db"
 
+# garante que a pasta do BD exista (em cenários de fallback)
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 
 def get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    # PRAGMAs para app web (menos bloqueios)
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
     return conn
 
 
@@ -25,7 +32,9 @@ def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
-    cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table,))
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table,)
+    )
     return cur.fetchone() is not None
 
 
@@ -33,13 +42,15 @@ def init_db():
     conn = get_conn()
     cur = conn.cursor()
 
-    # ---------------- MIGRAÇÃO ROBUSTA DA TABELA PHOTOS ----------------
-    # 1) Se já existe 'photos' com colunas antigas, migra para o novo layout
+    # -------- MIGRAÇÃO ROBUSTA DA TABELA PHOTOS (layout antigo -> novo) --------
     if _table_exists(conn, "photos"):
         cur.execute("PRAGMA table_info(photos);")
         cols = [r["name"] for r in cur.fetchall()]
+
+        # Migra tabela antiga (path/include/order_num)
         if ("path" in cols) or ("include" in cols) or ("order_num" in cols):
-            cur.executescript("""
+            cur.executescript(
+                """
                 CREATE TABLE IF NOT EXISTS photos_temp (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     checklist_id INTEGER,
@@ -51,37 +62,42 @@ def init_db():
                     include_in_report INTEGER,
                     display_order INTEGER
                 );
-            """)
-            # Copia dados antigos -> novos nomes (drive_file_id fica NULL)
-            cur.execute("""
-                INSERT INTO photos_temp (id, checklist_id, vrp_site_id, file_path, label, caption, include_in_report, display_order, drive_file_id)
-                SELECT id, checklist_id, vrp_site_id, path, label, caption, include, order_num, NULL
+                """
+            )
+            cur.execute(
+                """
+                INSERT INTO photos_temp
+                    (id, checklist_id, vrp_site_id, file_path, label, caption,
+                     include_in_report, display_order, drive_file_id)
+                SELECT id, checklist_id, vrp_site_id, path, label, caption,
+                       include,       order_num,     NULL
                 FROM photos;
-            """)
+                """
+            )
             cur.execute("DROP TABLE photos;")
             cur.execute("ALTER TABLE photos_temp RENAME TO photos;")
             conn.commit()
 
-        # 2) Se a photos existe, mas por algum motivo falta 'drive_file_id', adiciona
-        if not _column_exists(conn, "photos", "drive_file_id"):
-            cur.execute("ALTER TABLE photos ADD COLUMN drive_file_id TEXT;")
-            conn.commit()
-
-        # 3) Se alguma das colunas novas faltar (situação rara), tenta renomear
-        # Obs: normalmente o bloco acima (temp-table) já resolve isso.
-        if (not _column_exists(conn, "photos", "file_path")) and _column_exists(conn, "photos", "path"):
+        # Ajustes finos caso faltem colunas já no novo schema
+        if (not _column_exists(conn, "photos", "file_path")) and _column_exists(
+            conn, "photos", "path"
+        ):
             try:
                 cur.execute("ALTER TABLE photos RENAME COLUMN path TO file_path;")
                 conn.commit()
             except sqlite3.OperationalError:
                 pass
-        if (not _column_exists(conn, "photos", "include_in_report")) and _column_exists(conn, "photos", "include"):
+        if (not _column_exists(conn, "photos", "include_in_report")) and _column_exists(
+            conn, "photos", "include"
+        ):
             try:
                 cur.execute("ALTER TABLE photos RENAME COLUMN include TO include_in_report;")
                 conn.commit()
             except sqlite3.OperationalError:
                 pass
-        if (not _column_exists(conn, "photos", "display_order")) and _column_exists(conn, "photos", "order_num"):
+        if (not _column_exists(conn, "photos", "display_order")) and _column_exists(
+            conn, "photos", "order_num"
+        ):
             try:
                 cur.execute("ALTER TABLE photos RENAME COLUMN order_num TO display_order;")
                 conn.commit()
@@ -153,7 +169,8 @@ def init_db():
             label TEXT,
             caption TEXT,
             include_in_report INTEGER,
-            display_order INTEGER
+            display_order INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
         );
 
         CREATE TABLE IF NOT EXISTS email_destinatarios (
@@ -163,15 +180,32 @@ def init_db():
         """
     )
 
-    # Garante coluna nova em vrp_sites (rodará só se faltar)
+    # --------- colunas que podem faltar em bases existentes ---------
     if not _column_exists(conn, "vrp_sites", "has_automation"):
         cur.execute("ALTER TABLE vrp_sites ADD COLUMN has_automation INTEGER DEFAULT 0;")
         conn.commit()
 
-    # Garante 'drive_file_id' mesmo que a tabela photos tenha sido criada agora por outro .db antigo
+    # drive_file_id pode existir/ser útil mesmo sem Drive (opcional); não quebra nada
     if not _column_exists(conn, "photos", "drive_file_id"):
         cur.execute("ALTER TABLE photos ADD COLUMN drive_file_id TEXT;")
         conn.commit()
+
+    # NOVO: garantir created_at e fazer backfill
+    if not _column_exists(conn, "photos", "created_at"):
+        cur.execute("ALTER TABLE photos ADD COLUMN created_at TEXT;")
+        conn.commit()
+        # preenche registros antigos
+        cur.execute("UPDATE photos SET created_at = datetime('now') WHERE created_at IS NULL;")
+        conn.commit()
+
+    # --------- índices que ajudam nas telas ---------
+    cur.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_photos_checklist ON photos(checklist_id);
+        CREATE INDEX IF NOT EXISTS idx_photos_vrp       ON photos(vrp_site_id);
+        CREATE INDEX IF NOT EXISTS idx_reports_ck       ON reports(checklist_id);
+        """
+    )
 
     conn.close()
 
@@ -194,7 +228,6 @@ def add_destinatario(email: str) -> bool:
             pass
         return False
     except Exception as e:
-        # Log do erro para debug
         print(f"Erro ao adicionar email {email}: {e}")
         try:
             conn.close()
@@ -232,12 +265,14 @@ def listar_destinatarios() -> list:
     except Exception:
         # Se a tabela não existir por algum motivo, cria e retorna lista vazia
         conn = get_conn()
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS email_destinatarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT UNIQUE
             );
-        """)
+            """
+        )
         conn.commit()
         conn.close()
         return []

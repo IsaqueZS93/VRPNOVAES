@@ -1,9 +1,11 @@
+# file: backend/VRP_SERVICE/storage_service.py
 """
-Gerencia fotos:
+Gerencia fotos (somente armazenamento local):
 - Diretório por VRP: uploads/VRP_{site_id}/CK_{checklist_id}/arquivo.ext
-- save_photo_bytes(): salva local + (opcionalmente) Google Drive, e registra no DB
+- save_photo_bytes(): salva local e registra no DB
 - list_photos(checklist_id), list_photos_by_vrp(vrp_site_id) (tolerantes ao esquema)
 - update_photo_flags(), delete_photo()
+- purge_photos_older_than(days): limpeza opcional por retenção
 """
 from __future__ import annotations
 
@@ -11,19 +13,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import os
 from uuid import uuid4
+from datetime import datetime, timedelta
 
 from backend.VRP_SERVICE.export_paths import UPLOADS_DIR
 from backend.VRP_DATABASE.database import get_conn
-
-# ---- Integração opcional com Google Drive (se o módulo existir) ----
-_HAS_DRIVE = False
-_drive = None
-try:
-    from backend.VRP_SERVICE import service_google_drive as _drive  # type: ignore
-    _HAS_DRIVE = True
-except Exception:
-    _HAS_DRIVE = False
-    _drive = None
 
 
 # ----------------------- Utils de caminho/DB -----------------------
@@ -32,6 +25,7 @@ def _vrp_ck_dir(vrp_site_id: int, checklist_id: int) -> Path:
     d = UPLOADS_DIR / f"VRP_{vrp_site_id}" / f"CK_{checklist_id}"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
 
 def _safe_name(original_name: str, order: int) -> str:
     """Gera um nome seguro e único, preservando extensão quando possível."""
@@ -42,17 +36,6 @@ def _safe_name(original_name: str, order: int) -> str:
     h = uuid4().hex[:8]
     return f"{order:03d}_{(name or 'img')[:40]}_{h}{ext.lower()}"
 
-def _ensure_drive_column():
-    """Garante a existência da coluna drive_file_id em photos (se não existir)."""
-    conn = get_conn()
-    try:
-        cols = conn.execute("PRAGMA table_info(photos)").fetchall()
-        names = {c["name"] for c in cols}
-        if "drive_file_id" not in names:
-            conn.execute("ALTER TABLE photos ADD COLUMN drive_file_id TEXT")
-            conn.commit()
-    finally:
-        conn.close()
 
 def _has_column(conn, table: str, column: str) -> bool:
     cols = conn.execute(f"PRAGMA table_info({table})").fetchall()
@@ -71,8 +54,8 @@ def save_photo_bytes(
     order: int = 1,
 ) -> int:
     """
-    Salva bytes como arquivo local (sempre, para uso no DOCX) e, se disponível,
-    envia também ao Google Drive. Grava entrada em 'photos' e retorna o id da foto.
+    Salva bytes como arquivo local (para uso no DOCX) e grava a entrada em 'photos'.
+    Retorna o id da foto.
     """
     if not data:
         raise ValueError("Nenhum dado de imagem recebido.")
@@ -82,33 +65,20 @@ def save_photo_bytes(
     filename = _safe_name(original_name, order)
     local_path = folder / filename
     try:
-        local_path.write_bytes(data)  # salva local SEM depender de PIL
+        local_path.write_bytes(data)
     except Exception as e:
-        # falha em disco precisa ser explícita
         raise RuntimeError(f"Falha ao salvar arquivo local '{local_path}': {e}")
 
-    # 2) (Opcional) Google Drive
-    drive_file_id: Optional[str] = None
-    if _HAS_DRIVE and _drive is not None:
-        try:
-            # sempre cria dentro da pasta-RAIZ configurada
-            root_id = _drive.get_root_folder_id()
-            main_folder_id = _drive.create_folder("VRP_Fotos", parent_id=root_id)
-            sub_folder_id = _drive.create_subfolder(main_folder_id, f"VRP_{vrp_site_id}_CK_{checklist_id}")
-            link_or_id = _drive.upload_bytes_to_drive(data, filename, folder_id=sub_folder_id)
-            drive_file_id = str(link_or_id) if link_or_id else None
-        except Exception:
-            drive_file_id = None  # não quebra o fluxo
-    # 3) Garantir coluna drive_file_id (bancos antigos)
-    _ensure_drive_column()
-
-    # 4) Inserir no DB
+    # 2) Inserir no DB
     conn = get_conn()
     try:
+        # drive_file_id fica sempre NULL (não usamos nuvem)
         cur = conn.execute(
             """
-            INSERT INTO photos (vrp_site_id, checklist_id, file_path, label, caption, include_in_report, display_order, drive_file_id)
-            VALUES (?,?,?,?,?,?,?,?)
+            INSERT INTO photos (
+                vrp_site_id, checklist_id, file_path, label, caption,
+                include_in_report, display_order, drive_file_id
+            ) VALUES (?,?,?,?,?,?,?,NULL)
             """,
             (
                 vrp_site_id,
@@ -118,7 +88,6 @@ def save_photo_bytes(
                 caption,
                 int(bool(include)),
                 int(order),
-                drive_file_id,
             ),
         )
         conn.commit()
@@ -181,41 +150,63 @@ def update_photo_flags(photo_id: int, include: bool, order: int, caption: str, l
 
 def delete_photo(photo_id: int) -> bool:
     """
-    Remove o registro do banco, tenta excluir o arquivo local
-    e (se houver) tenta excluir no Google Drive.
+    Remove o registro do banco e tenta excluir o arquivo local.
+    (Sem integração com nuvem.)
     """
     conn = get_conn()
     try:
         row = conn.execute(
-            "SELECT file_path, drive_file_id FROM photos WHERE id=?",
+            "SELECT file_path FROM photos WHERE id=?",
             (photo_id,),
         ).fetchone()
 
         if row:
-            # Remove arquivo local
             try:
                 Path(row["file_path"]).unlink(missing_ok=True)
             except Exception:
                 pass
 
-            # (Opcional) exclui do Drive
-            drive_id = None
-            # sqlite3.Row tem .keys(); se faltar a coluna em DB antigo, tratamos como None
-            try:
-                if "drive_file_id" in row.keys():
-                    drive_id = row["drive_file_id"]
-            except Exception:
-                drive_id = row["drive_file_id"] if "drive_file_id" in row else None
-
-            if _HAS_DRIVE and _drive is not None and drive_id:
-                try:
-                    if hasattr(_drive, "delete_from_drive"):
-                        _drive.delete_from_drive(drive_id)
-                except Exception:
-                    pass
-
         conn.execute("DELETE FROM photos WHERE id=?", (photo_id,))
         conn.commit()
         return True
+    finally:
+        conn.close()
+
+
+# ------------------------------ Limpeza opcional ------------------------------
+def purge_photos_older_than(days: int) -> Dict[str, int]:
+    """
+    Apaga **arquivos locais** e **registros** de fotos com created_at mais antigo do que N dias.
+    Útil para manter apenas por um tempo até baixar os relatórios.
+
+    Retorna {"deleted_rows": X, "deleted_files": Y}.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=max(0, days))
+    cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+
+    conn = get_conn()
+    try:
+        # Seleciona as fotos que serão apagadas
+        has_created = _has_column(conn, "photos", "created_at")
+        if not has_created:
+            # se o DB for muito antigo, não arriscar — não apaga nada
+            return {"deleted_rows": 0, "deleted_files": 0}
+
+        rows = conn.execute(
+            "SELECT id, file_path FROM photos WHERE created_at < ?",
+            (cutoff_str,),
+        ).fetchall()
+
+        deleted_files = 0
+        for r in rows:
+            try:
+                Path(r["file_path"]).unlink(missing_ok=True)
+                deleted_files += 1
+            except Exception:
+                pass
+
+        conn.execute("DELETE FROM photos WHERE created_at < ?", (cutoff_str,))
+        conn.commit()
+        return {"deleted_rows": len(rows), "deleted_files": deleted_files}
     finally:
         conn.close()
