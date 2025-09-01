@@ -146,21 +146,23 @@ def _build_service_with_oauth() -> Tuple[Optional[object], str]:
         return None, "oauth erro"
 
 def get_google_drive_service():
-    """
-    Tenta Service Account + Shared Drive; se não conseguir, cai para OAuth do usuário.
-    Retorna (service, modo) onde modo ∈ {'service_account','oauth_cached','oauth_new'}.
-    """
-    # 1) tenta SA
-    service, mode = _build_service_with_service_account()
-    if service:
-        return service, mode
+    """Preferência: force_oauth=True => usa OAuth. Caso contrário tenta SA; se falhar, cai para OAuth."""
+    st = _st()
+    force_oauth = bool(_secrets("features", "force_oauth", False))
+    if force_oauth:
+        svc, mode = _build_service_with_oauth()
+        return svc, mode
 
-    # 2) fallback OAuth user
-    service, mode = _build_service_with_oauth()
-    if service:
-        return service, mode
-
+    # tenta Service Account primeiro
+    svc, mode = _build_service_with_service_account()
+    if svc:
+        return svc, mode
+    # fallback OAuth
+    svc, mode = _build_service_with_oauth()
+    if svc:
+        return svc, mode
     return None, "indisponível"
+
 
 def get_root_folder_id_for_upload(service, mode: str) -> Optional[str]:
     """
