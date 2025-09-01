@@ -1,14 +1,41 @@
+# file: backend/VRP_SERVICE/report_service.py
+from __future__ import annotations
+
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 from datetime import datetime
+import sqlite3
 
-from .export_paths import EXPORTS_DIR, LOGOS_DIR
-from ..VRP_DATABASE.database import get_conn
+# ---------- imports robustos de paths e DB ----------
+try:
+    # Caminho “normal” quando o pacote backend.* é resolvido
+    from backend.VRP_SERVICE.export_paths import EXPORTS_DIR, LOGOS_DIR
+except Exception:
+    # Fallback quando o Python não enxerga o pacote como módulo
+    ROOT = Path(__file__).resolve().parents[2]  # raiz do projeto
+    EXPORTS_DIR = ROOT / "frontend" / "assets" / "exports"
+    LOGOS_DIR = ROOT / "frontend" / "assets" / "logos"
+    EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+
+try:
+    from backend.VRP_DATABASE.database import get_conn as _get_conn_real  # type: ignore
+    def get_conn() -> sqlite3.Connection:
+        return _get_conn_real()
+except Exception:
+    # Fallback simples para garantir que o relatório funcione mesmo sem o import do módulo
+    ROOT = Path(__file__).resolve().parents[2]
+    DB_PATH = ROOT / "backend" / "VRP_DATABASE" / "vrp.db"
+    def get_conn() -> sqlite3.Connection:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON;")
+        return conn
 
 LOGO_PATH = LOGOS_DIR / "NOVAES.png"
 
@@ -27,7 +54,11 @@ def _add_field(paragraph, field_code: str, visible_hint: str = ""):
 
 def _add_seq_figure_caption(paragraph, caption_text: str, label: str = "Figura"):
     """Legenda com numeração automática SEQ."""
-    paragraph.style = "Caption"
+    # Tenta aplicar estilo Caption; se não existir, segue sem quebrar
+    try:
+        paragraph.style = "Caption"
+    except Exception:
+        pass
     paragraph.add_run(f"{label} ")
     r = paragraph.add_run()
     b = OxmlElement("w:fldChar"); b.set(qn("w:fldCharType"), "begin")
@@ -87,12 +118,18 @@ def _add_header_logo(doc: Document):
 
 def _style_table(table):
     """Aplica estilo de grade e cabeçalho em negrito."""
-    table.style = "Table Grid"
-    # primeira linha como cabeçalho se fizer sentido
+    try:
+        table.style = "Table Grid"
+    except Exception:
+        pass
     if table.rows:
+        # Deixa todo o texto da primeira linha em negrito (mais robusto)
         for cell in table.rows[0].cells:
-            for run in cell.paragraphs[0].runs or [cell.paragraphs[0].add_run(cell.paragraphs[0].text)]:
-                run.bold = True
+            for para in cell.paragraphs:
+                if not para.runs:
+                    para.add_run(para.text)
+                for run in para.runs:
+                    run.bold = True
 
 # ---------- dados ----------
 def _fetch_all(checklist_id: int):
@@ -113,7 +150,6 @@ def _fetch_all(checklist_id: int):
 
 # ---------- página 4: introdução + Tabela 1 ----------
 def _add_intro_and_table(doc: Document):
-    # Texto mais conciso
     intro = (
         "Esta planilha consolida 18 VRPs do município de Maceió, com identificação, DN e link georreferenciado para cada ponto. "
         "A relação padroniza o acompanhamento operacional e subsidia inspeções, manutenções e auditorias."
@@ -153,12 +189,9 @@ def _add_intro_and_table(doc: Document):
     _style_table(table)
 
 # ---------- DOCX ----------
-def build_docx(checklist_id: int, ai_text: str, pasta_destino: str = None) -> Path:
+def build_docx(checklist_id: int, ai_text: str, pasta_destino: Optional[str] = None) -> Path:
     ck, site, photos = _fetch_all(checklist_id)
-    if pasta_destino:
-        export_folder = Path(pasta_destino) / f"{checklist_id}"
-    else:
-        export_folder = EXPORTS_DIR / f"{checklist_id}"
+    export_folder = (Path(pasta_destino) if pasta_destino else EXPORTS_DIR) / f"{checklist_id}"
     export_folder.mkdir(parents=True, exist_ok=True)
     fname = export_folder / f"Relatorio_VRP_{checklist_id}.docx"
 
@@ -183,7 +216,6 @@ def build_docx(checklist_id: int, ai_text: str, pasta_destino: str = None) -> Pa
     mid.alignment = WD_ALIGN_PARAGRAPH.CENTER
     mid.runs[0].font.size = Pt(12); mid.runs[0].font.name = "Times New Roman"
 
-    # mês/ano
     try:
         dt = datetime.strptime(ck.get("date", ""), "%Y-%m-%d")
     except Exception:
@@ -211,7 +243,6 @@ def build_docx(checklist_id: int, ai_text: str, pasta_destino: str = None) -> Pa
     doc.add_page_break()
 
     # p.5+ CONTEÚDO
-    # Dados Técnicos (TABELA)
     doc.add_heading("Dados Técnicos da VRP", level=1)
     t1 = doc.add_table(rows=6, cols=2)
     drows = [
@@ -227,7 +258,6 @@ def build_docx(checklist_id: int, ai_text: str, pasta_destino: str = None) -> Pa
         t1.cell(i, 1).text = str(v)
     _style_table(t1)
 
-    # Análise Hidráulica (TABELA) – sem observações do usuário
     doc.add_heading("Análise Hidráulica", level=1)
     t2 = doc.add_table(rows=3, cols=2)
     t2.cell(0, 0).text, t2.cell(0, 1).text = "Montante c/ registro", "Sim" if ck.get("has_reg_upstream") else "Não"
@@ -235,22 +265,21 @@ def build_docx(checklist_id: int, ai_text: str, pasta_destino: str = None) -> Pa
     t2.cell(2, 0).text, t2.cell(2, 1).text = "Bypass", "Sim" if ck.get("has_bypass") else "Não"
     _style_table(t2)
 
-    # Análise de Pressão (mca) – TABELA
     doc.add_heading("Análise de Pressão (mca)", level=1)
     def n(v):
-        try: return f"{float(v):.1f}"
-        except: return "-"
+        try:
+            return f"{float(v):.1f}"
+        except Exception:
+            return "-"
     t3 = doc.add_table(rows=3, cols=3)
     t3.cell(0,0).text, t3.cell(0,1).text, t3.cell(0,2).text = "", "Antes (mca)", "Depois (mca)"
     t3.cell(1,0).text, t3.cell(1,1).text, t3.cell(1,2).text = "Montante", n(ck.get("p_up_before")), n(ck.get("p_up_after"))
     t3.cell(2,0).text, t3.cell(2,1).text, t3.cell(2,2).text = "Jusante",  n(ck.get("p_down_before")), n(ck.get("p_down_after"))
     _style_table(t3)
 
-    # Análise Técnica (IA) – concisa (texto já vem sintetizado pela IA)
     doc.add_heading("Análise Técnica (IA)", level=1)
     doc.add_paragraph(ai_text or "—")
 
-    # Figuras – 10 cm (alt) x 7,5 cm (larg) – legenda apenas com rótulo
     if photos:
         doc.add_heading("Figuras", level=1)
         for ph in photos:
@@ -268,7 +297,7 @@ def build_docx(checklist_id: int, ai_text: str, pasta_destino: str = None) -> Pa
     fname = _safe_save_docx(doc, fname)
     return fname
 
-def convert_to_pdf(docx_path: Path) -> Path | None:
+def convert_to_pdf(docx_path: Path) -> Optional[Path]:
     """DOCX -> PDF (usa nome alternativo se arquivo estiver bloqueado)."""
     try:
         from docx2pdf import convert
@@ -278,7 +307,7 @@ def convert_to_pdf(docx_path: Path) -> Path | None:
     except Exception:
         return None
 
-def generate_full_report(checklist_id: int, ai_text: str, pasta_destino: str = None) -> Tuple[str, str | None]:
+def generate_full_report(checklist_id: int, ai_text: str, pasta_destino: Optional[str] = None) -> Tuple[str, Optional[str]]:
     docx_path = build_docx(checklist_id, ai_text, pasta_destino)
     pdf_path = convert_to_pdf(docx_path)
 
