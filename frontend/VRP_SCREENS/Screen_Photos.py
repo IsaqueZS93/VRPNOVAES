@@ -4,7 +4,7 @@ Upload de fotos (multi) com metadados por arquivo.
 Salva em uploads/VRP_{site}/CK_{checklist}/ e grava vrp_site_id no DB.
 Lista para edição (incluir/ordem/legenda/rótulo) e exclusão.
 UI padronizada com header/logo, toolbar e cards + LOGS/DIAGNÓSTICO na própria tela.
-(Drive desativado: armazenamento apenas local)
+(Drive desativado: armazenamento apenas local e temporário por sessão)
 """
 from __future__ import annotations
 from datetime import datetime
@@ -13,9 +13,9 @@ import streamlit as st
 from backend.VRP_DATABASE.database import get_conn
 from backend.VRP_SERVICE.storage_service import (
     save_photo_bytes, list_photos, list_photos_by_vrp,
-    update_photo_flags, delete_photo
+    update_photo_flags, delete_photo, purge_session_photos,   # <- NOVO
 )
-from backend.VRP_SERVICE.export_paths import UPLOADS_DIR
+from backend.VRP_SERVICE.export_paths import SESSION_UPLOADS_DIR  # <- TROCA: era UPLOADS_DIR
 from frontend.VRP_STYLES.layout import (
     page_setup, app_header, toolbar, section_card, pill
 )
@@ -59,6 +59,9 @@ def render():
     page_setup("VRP • Fotos", icon="📷")
     app_header("Fotos do Checklist", "Envie, organize e selecione as imagens que irão para o relatório.")
 
+    # AVISO: armazenamento temporário por sessão
+    st.info("🗂️ **Armazenamento temporário nesta sessão** — as imagens ficam disponíveis apenas até você finalizar/baixar os relatórios ou limpar a sessão.")
+
     # checklist atual
     cid = st.session_state.get("current_checklist_id")
     if not cid:
@@ -72,18 +75,26 @@ def render():
         _log(f"Abortado: checklist {cid} sem vrp_site_id.")
         return
 
-    # toolbar (Drive removido)
-    actions = toolbar(["Ir para Checklist", "Ir para Relatório"])
+    # toolbar (Drive removido) + limpeza de sessão
+    actions = toolbar(["Ir para Checklist", "Ir para Relatório", "Limpar fotos desta sessão"])  # <- NOVO item
     if actions["Ir para Checklist"]:
         st.session_state["nav_to"] = "Checklist"; st.rerun()
     if actions["Ir para Relatório"]:
         st.session_state["nav_to"] = "Relatório"; st.rerun()
+    if actions["Limpar fotos desta sessão"]:
+        with st.expander("Confirmar limpeza das fotos EFÊMERAS desta sessão (apenas deste checklist)", expanded=True):
+            ok = st.checkbox("Confirmo remover todas as fotos temporárias **deste checklist**.")
+            if st.button("Remover agora", type="secondary", disabled=not ok):
+                res = purge_session_photos(checklist_id=cid)
+                st.success(f"Limpeza concluída. Registros: {res['rows_deleted']} | Arquivos: {res['files_deleted']}")
+                _log(f"Purga de sessão (checklist {cid}): {res}")
+                st.rerun()
 
     # header pills
     pill(f"Checklist #{cid}")
     pill(f"VRP #{site_id}", "success")
     st.caption(_get_vrp_label(site_id))
-    _log(f"Tela carregada: checklist_id={cid}, vrp_site_id={site_id}, uploads_dir={UPLOADS_DIR}")
+    _log(f"Tela carregada: checklist_id={cid}, vrp_site_id={site_id}, session_uploads_dir={SESSION_UPLOADS_DIR}")
 
     # ===== Upload =====
     with section_card("Upload de imagens", "Selecione múltiplos arquivos e defina metadados por imagem."):
@@ -179,6 +190,8 @@ def render():
             for r in rows:
                 with st.expander(f"#{r['id']} • {r['label']}  • ordem {r['display_order']}", expanded=False):
                     st.image(r["file_path"], use_container_width=True, caption=None)
+                    if r.get("ephemeral", 1):
+                        st.caption("⏳ Armazenamento temporário (sessão atual)")
                     col1, col2, col3, col4 = st.columns([1,1,3,1])
                     include = col1.checkbox("Incluir", value=bool(r["include_in_report"]), key=f"inc_{r['id']}")
                     order = col2.number_input("Ordem", 1, 999, value=int(r["display_order"]), key=f"ord_{r['id']}")
