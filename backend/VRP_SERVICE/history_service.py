@@ -3,8 +3,9 @@
 Rotinas de histórico:
 - delete_checklist(): apaga checklist, fotos (arquivos e DB), relatórios (arquivos e DB)
   e, opcionalmente, a VRP se ficar órfã.
-Compatível com o fluxo atual (armazenamento local, sem Google Drive).
-Retorna dict no formato esperado pela Screen_Historico:
+
+Independente de export_paths (usa fallback de caminhos).
+Retorno:
   { ok: bool, files_deleted: int, exports_deleted: int, vrp_deleted: bool, reason?: str }
 """
 
@@ -15,7 +16,20 @@ from pathlib import Path
 from typing import Dict, Any
 
 from backend.VRP_DATABASE.database import get_conn
-from backend.VRP_SERVICE.export_paths import UPLOADS_DIR, EXPORTS_DIR
+
+# ---------------- Paths robustos (sem depender de export_paths) ----------------
+try:
+    # Tenta usar export_paths se disponível
+    from backend.VRP_SERVICE.export_paths import UPLOADS_DIR as _U, EXPORTS_DIR as _E  # type: ignore
+    UPLOADS_DIR = Path(_U)
+    EXPORTS_DIR = Path(_E)
+except Exception:
+    # Fallback: calcula a partir da raiz do repo
+    ROOT = Path(__file__).resolve().parents[2]  # .../backend/VRP_SERVICE/ -> repo root
+    UPLOADS_DIR = ROOT / "frontend" / "assets" / "uploads"
+    EXPORTS_DIR = ROOT / "frontend" / "assets" / "exports"
+    for _p in (UPLOADS_DIR, EXPORTS_DIR):
+        _p.mkdir(parents=True, exist_ok=True)
 
 
 def _safe_unlink(path: Path) -> bool:
@@ -42,15 +56,6 @@ def delete_checklist(checklist_id: int, delete_vrp_if_orphan: bool = False) -> D
       - relatório (docx/pdf) e pasta exports/{checklist} quando existir
       - o próprio checklist
       - opcionalmente a VRP se ficar sem checklists
-
-    Retorna:
-      {
-        "ok": bool,
-        "files_deleted": int,
-        "exports_deleted": int,
-        "vrp_deleted": bool,
-        "reason": str (se falhar)
-      }
     """
     files_deleted = 0
     exports_deleted = 0
@@ -58,7 +63,7 @@ def delete_checklist(checklist_id: int, delete_vrp_if_orphan: bool = False) -> D
 
     conn = get_conn()
     try:
-        # Descobre a VRP do checklist
+        # Qual VRP?
         row_ck = conn.execute(
             "SELECT vrp_site_id FROM checklists WHERE id=?",
             (checklist_id,),
@@ -75,19 +80,19 @@ def delete_checklist(checklist_id: int, delete_vrp_if_orphan: bool = False) -> D
         ).fetchall()
 
         for r in rows_ph:
-            p = Path(r["file_path"]) if r["file_path"] else None
-            if p and p.exists():
-                if _safe_unlink(p):
-                    files_deleted += 1
+            if r["file_path"]:
+                p = Path(r["file_path"])
+                if p.exists():
+                    if _safe_unlink(p):
+                        files_deleted += 1
 
         conn.execute("DELETE FROM photos WHERE checklist_id=?", (checklist_id,))
         conn.commit()
 
-        # Remove a pasta CK_{checklist} (se existir)
+        # Remove a pasta CK_{checklist}
         ck_dir = UPLOADS_DIR / f"VRP_{vrp_site_id}" / f"CK_{checklist_id}"
         if ck_dir.exists():
             if _safe_rmtree(ck_dir):
-                # conta como “exports” só para efeito de relatório (ou poderia ignorar)
                 exports_deleted += 1
 
         # --- Relatórios
@@ -96,17 +101,13 @@ def delete_checklist(checklist_id: int, delete_vrp_if_orphan: bool = False) -> D
             (checklist_id,),
         ).fetchone()
         if row_rep:
-            docx_path = Path(row_rep["docx_path"]) if row_rep["docx_path"] else None
-            pdf_path = Path(row_rep["pdf_path"]) if row_rep["pdf_path"] else None
+            for col in ("docx_path", "pdf_path"):
+                p = Path(row_rep[col]) if row_rep[col] else None
+                if p and p.exists():
+                    if _safe_unlink(p):
+                        exports_deleted += 1
 
-            if docx_path and docx_path.exists():
-                if _safe_unlink(docx_path):
-                    exports_deleted += 1
-            if pdf_path and pdf_path.exists():
-                if _safe_unlink(pdf_path):
-                    exports_deleted += 1
-
-            # Tenta também apagar uma pasta padrão de exports/{checklist}, se existir
+            # Tenta apagar pasta padrão exports/{checklist}
             exp_dir = EXPORTS_DIR / f"{checklist_id}"
             if exp_dir.exists():
                 _safe_rmtree(exp_dir)
@@ -120,16 +121,14 @@ def delete_checklist(checklist_id: int, delete_vrp_if_orphan: bool = False) -> D
 
         # --- Opcional: remove a VRP se ficar órfã
         if delete_vrp_if_orphan and vrp_site_id:
-            count = conn.execute(
+            n = conn.execute(
                 "SELECT COUNT(1) AS n FROM checklists WHERE vrp_site_id=?",
                 (vrp_site_id,),
             ).fetchone()["n"]
-            if count == 0:
-                # Apaga diretório raiz VRP_{site}
+            if n == 0:
                 vrp_dir = UPLOADS_DIR / f"VRP_{vrp_site_id}"
                 if vrp_dir.exists():
                     _safe_rmtree(vrp_dir)
-
                 conn.execute("DELETE FROM vrp_sites WHERE id=?", (vrp_site_id,))
                 conn.commit()
                 vrp_deleted = True
