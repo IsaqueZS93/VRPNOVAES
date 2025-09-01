@@ -42,69 +42,7 @@ def init_db():
     conn = get_conn()
     cur = conn.cursor()
 
-    # -------- MIGRAÇÃO ROBUSTA DA TABELA PHOTOS (layout antigo -> novo) --------
-    if _table_exists(conn, "photos"):
-        cur.execute("PRAGMA table_info(photos);")
-        cols = [r["name"] for r in cur.fetchall()]
-
-        # Migra tabela antiga (path/include/order_num)
-        if ("path" in cols) or ("include" in cols) or ("order_num" in cols):
-            cur.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS photos_temp (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    checklist_id INTEGER,
-                    vrp_site_id INTEGER,
-                    file_path TEXT,
-                    drive_file_id TEXT,
-                    label TEXT,
-                    caption TEXT,
-                    include_in_report INTEGER,
-                    display_order INTEGER
-                );
-                """
-            )
-            cur.execute(
-                """
-                INSERT INTO photos_temp
-                    (id, checklist_id, vrp_site_id, file_path, label, caption,
-                     include_in_report, display_order, drive_file_id)
-                SELECT id, checklist_id, vrp_site_id, path, label, caption,
-                       include,       order_num,     NULL
-                FROM photos;
-                """
-            )
-            cur.execute("DROP TABLE photos;")
-            cur.execute("ALTER TABLE photos_temp RENAME TO photos;")
-            conn.commit()
-
-        # Ajustes finos caso faltem colunas já no novo schema
-        if (not _column_exists(conn, "photos", "file_path")) and _column_exists(
-            conn, "photos", "path"
-        ):
-            try:
-                cur.execute("ALTER TABLE photos RENAME COLUMN path TO file_path;")
-                conn.commit()
-            except sqlite3.OperationalError:
-                pass
-        if (not _column_exists(conn, "photos", "include_in_report")) and _column_exists(
-            conn, "photos", "include"
-        ):
-            try:
-                cur.execute("ALTER TABLE photos RENAME COLUMN include TO include_in_report;")
-                conn.commit()
-            except sqlite3.OperationalError:
-                pass
-        if (not _column_exists(conn, "photos", "display_order")) and _column_exists(
-            conn, "photos", "order_num"
-        ):
-            try:
-                cur.execute("ALTER TABLE photos RENAME COLUMN order_num TO display_order;")
-                conn.commit()
-            except sqlite3.OperationalError:
-                pass
-
-    # ---------------- TABELAS BASE (idempotentes) ----------------
+    # 1) Cria tabelas modernas (idempotente)
     cur.executescript(
         """
         CREATE TABLE IF NOT EXISTS companies (
@@ -154,12 +92,13 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS reports (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            checklist_id INTEGER,
+            checklist_id INTEGER UNIQUE, -- opcional: 1:1
             ai_summary TEXT,
             docx_path TEXT,
             pdf_path TEXT
         );
 
+        -- já com drive_file_id no esquema moderno
         CREATE TABLE IF NOT EXISTS photos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             checklist_id INTEGER,
@@ -169,8 +108,7 @@ def init_db():
             label TEXT,
             caption TEXT,
             include_in_report INTEGER,
-            display_order INTEGER,
-            created_at TEXT DEFAULT (datetime('now'))
+            display_order INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS email_destinatarios (
@@ -179,35 +117,48 @@ def init_db():
         );
         """
     )
+    conn.commit()
 
-    # --------- colunas que podem faltar em bases existentes ---------
+    # 2) Migração de esquemas antigos da 'photos' (path/include/order_num)
+    cur.execute("PRAGMA table_info(photos);")
+    cols = [r["name"] for r in cur.fetchall()]
+    legacy = {"path", "include", "order_num"}
+    if any(c in cols for c in legacy):
+        cur.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS photos_temp (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                checklist_id INTEGER,
+                vrp_site_id INTEGER,
+                file_path TEXT,
+                drive_file_id TEXT,
+                label TEXT,
+                caption TEXT,
+                include_in_report INTEGER,
+                display_order INTEGER
+            );
+            """
+        )
+        cur.execute(
+            """
+            INSERT INTO photos_temp
+                (id, checklist_id, vrp_site_id, file_path, drive_file_id, label, caption, include_in_report, display_order)
+            SELECT
+                id, checklist_id, vrp_site_id, path, NULL, label, caption, include, order_num
+            FROM photos;
+            """
+        )
+        cur.execute("DROP TABLE photos;")
+        cur.execute("ALTER TABLE photos_temp RENAME TO photos;")
+        conn.commit()
+
+    # 3) Coluna 'has_automation' em vrp_sites (idempotente)
     if not _column_exists(conn, "vrp_sites", "has_automation"):
         cur.execute("ALTER TABLE vrp_sites ADD COLUMN has_automation INTEGER DEFAULT 0;")
         conn.commit()
 
-    # drive_file_id pode existir/ser útil mesmo sem Drive (opcional); não quebra nada
-    if not _column_exists(conn, "photos", "drive_file_id"):
-        cur.execute("ALTER TABLE photos ADD COLUMN drive_file_id TEXT;")
-        conn.commit()
-
-    # NOVO: garantir created_at e fazer backfill
-    if not _column_exists(conn, "photos", "created_at"):
-        cur.execute("ALTER TABLE photos ADD COLUMN created_at TEXT;")
-        conn.commit()
-        # preenche registros antigos
-        cur.execute("UPDATE photos SET created_at = datetime('now') WHERE created_at IS NULL;")
-        conn.commit()
-
-    # --------- índices que ajudam nas telas ---------
-    cur.executescript(
-        """
-        CREATE INDEX IF NOT EXISTS idx_photos_checklist ON photos(checklist_id);
-        CREATE INDEX IF NOT EXISTS idx_photos_vrp       ON photos(vrp_site_id);
-        CREATE INDEX IF NOT EXISTS idx_reports_ck       ON reports(checklist_id);
-        """
-    )
-
     conn.close()
+
 
 
 # ----------------- utilitários de emails -----------------
