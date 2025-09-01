@@ -49,7 +49,6 @@ def save_photo_bytes(
 ) -> int:
     if not data:
         raise ValueError("Nenhum dado de imagem recebido.")
-
     folder = _vrp_ck_dir(vrp_site_id, checklist_id)
     filename = _safe_name(original_name, order)
     local_path = folder / filename
@@ -58,22 +57,14 @@ def save_photo_bytes(
     conn = get_conn()
     try:
         cols = _cols(conn, "photos")
-        # colunas sempre presentes no insert
-        field_names = [
-            "vrp_site_id", "checklist_id", "file_path", "label", "caption",
-            "include_in_report", "display_order"
-        ]
-        values = [
-            vrp_site_id, checklist_id, str(local_path), label, caption,
-            int(bool(include)), int(order)
-        ]
-        # opcionais conforme esquema atual
+        field_names = ["vrp_site_id", "checklist_id", "file_path", "label", "caption",
+                       "include_in_report", "display_order"]
+        values = [vrp_site_id, checklist_id, str(local_path), label, caption,
+                  int(bool(include)), int(order)]
         if "drive_file_id" in cols:
-            field_names.append("drive_file_id")
-            values.append(None)
+            field_names.append("drive_file_id"); values.append(None)
         if "ephemeral" in cols:
-            field_names.append("ephemeral")
-            values.append(1)  # marcar como efêmero (sessão)
+            field_names.append("ephemeral"); values.append(1)  # sessão
 
         placeholders = ",".join(["?"] * len(values))
         sql = f"INSERT INTO photos ({','.join(field_names)}) VALUES ({placeholders})"
@@ -83,14 +74,13 @@ def save_photo_bytes(
     finally:
         conn.close()
 
-def list_photos(checklist_id: int) -> List[Dict[str, Any]]:
+def list_photos_by_vrp(vrp_site_id: int) -> List[Dict[str, Any]]:
     conn = get_conn()
     try:
         cols = _cols(conn, "photos")
         file_col = "file_path" if "file_path" in cols else ("path" if "path" in cols else None)
         if not file_col:
             return []
-
         include_sel = "include_in_report" if "include_in_report" in cols else ("include" if "include" in cols else "0")
         order_sel   = "display_order"     if "display_order"     in cols else ("order_num" if "order_num" in cols else "id")
         drive_sel   = "drive_file_id"     if "drive_file_id"     in cols else "NULL"
@@ -105,10 +95,10 @@ def list_photos(checklist_id: int) -> List[Dict[str, Any]]:
                    {drive_sel}   AS drive_file_id,
                    {eph_sel}     AS ephemeral
             FROM photos
-            WHERE checklist_id = ?
-            ORDER BY display_order, id
+            WHERE vrp_site_id = ?
+            ORDER BY checklist_id DESC, display_order, id
         """
-        rows = conn.execute(sql, (checklist_id,)).fetchall()
+        rows = conn.execute(sql, (vrp_site_id,)).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()

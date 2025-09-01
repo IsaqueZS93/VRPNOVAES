@@ -1,21 +1,19 @@
 # file: frontend/VRP_SCREENS/Screen_Photos.py
 """
 Upload de fotos (multi) com metadados por arquivo.
-Salva em uploads/VRP_{site}/CK_{checklist}/ e grava vrp_site_id no DB.
-Lista para edição (incluir/ordem/legenda/rótulo) e exclusão.
-UI padronizada com header/logo, toolbar e cards + LOGS/DIAGNÓSTICO na própria tela.
-(Drive desativado: armazenamento apenas local e temporário por sessão)
+Armazenamento local e temporário por sessão (sem Drive).
 """
 from __future__ import annotations
 from datetime import datetime
+from pathlib import Path
 
 import streamlit as st
 from backend.VRP_DATABASE.database import get_conn
 from backend.VRP_SERVICE.storage_service import (
     save_photo_bytes, list_photos, list_photos_by_vrp,
-    update_photo_flags, delete_photo, purge_session_photos,   # <- NOVO
+    update_photo_flags, delete_photo, purge_session_photos,
 )
-from backend.VRP_SERVICE.export_paths import SESSION_UPLOADS_DIR  # <- TROCA: era UPLOADS_DIR
+from backend.VRP_SERVICE.export_paths import SESSION_UPLOADS_DIR
 from frontend.VRP_STYLES.layout import (
     page_setup, app_header, toolbar, section_card, pill
 )
@@ -27,7 +25,7 @@ DEFAULT_LABELS = [
     "Conexões (antes)","Conexões (após)","Fechamento de registros","Abertura de registros","Personalizado"
 ]
 
-# ------------------------ helpers de log ------------------------
+# ------------------------ logs ------------------------
 def _init_log():
     st.session_state.setdefault("photo_logs", [])
 
@@ -38,7 +36,7 @@ def _log(msg: str):
     _init_log()
     st.session_state["photo_logs"].append(f"[{_now()}] {msg}")
 
-# ------------------------ helpers de dados ------------------------
+# ------------------------ dados ------------------------
 def _get_vrp_site_id(checklist_id: int) -> int | None:
     conn = get_conn()
     row = conn.execute("SELECT vrp_site_id FROM checklists WHERE id=?", (checklist_id,)).fetchone()
@@ -59,7 +57,6 @@ def render():
     page_setup("VRP • Fotos", icon="📷")
     app_header("Fotos do Checklist", "Envie, organize e selecione as imagens que irão para o relatório.")
 
-    # AVISO: armazenamento temporário por sessão
     st.info("🗂️ **Armazenamento temporário nesta sessão** — as imagens ficam disponíveis apenas até você finalizar/baixar os relatórios ou limpar a sessão.")
 
     # checklist atual
@@ -75,8 +72,8 @@ def render():
         _log(f"Abortado: checklist {cid} sem vrp_site_id.")
         return
 
-    # toolbar (Drive removido) + limpeza de sessão
-    actions = toolbar(["Ir para Checklist", "Ir para Relatório", "Limpar fotos desta sessão"])  # <- NOVO item
+    # toolbar
+    actions = toolbar(["Ir para Checklist", "Ir para Relatório", "Limpar fotos desta sessão"])
     if actions["Ir para Checklist"]:
         st.session_state["nav_to"] = "Checklist"; st.rerun()
     if actions["Ir para Relatório"]:
@@ -90,7 +87,7 @@ def render():
                 _log(f"Purga de sessão (checklist {cid}): {res}")
                 st.rerun()
 
-    # header pills
+    # header
     pill(f"Checklist #{cid}")
     pill(f"VRP #{site_id}", "success")
     st.caption(_get_vrp_label(site_id))
@@ -153,7 +150,7 @@ def render():
                                 order=m["order"],
                             )
 
-                            # Buscar o caminho salvo para log (opcional)
+                            # log do caminho salvo
                             conn = get_conn()
                             row = conn.execute("SELECT file_path FROM photos WHERE id=?", (pid,)).fetchone()
                             conn.close()
@@ -189,22 +186,22 @@ def render():
         else:
             for r in rows:
                 with st.expander(f"#{r['id']} • {r['label']}  • ordem {r['display_order']}", expanded=False):
-                    st.image(r["file_path"], use_container_width=True, caption=None)
+                    # Caminho absoluto para evitar problemas de cwd
+                    img_path = Path(str(r["file_path"])).resolve()
+                    if img_path.exists():
+                        st.image(str(img_path), use_container_width=True, caption=None)
+                    else:
+                        st.warning(f"Arquivo de imagem não encontrado: {img_path}")
+                        st.caption("Possível motivo: sessão reiniciada / pasta temporária diferente.")
+
                     if r.get("ephemeral", 1):
                         st.caption("⏳ Armazenamento temporário (sessão atual)")
+
                     col1, col2, col3, col4 = st.columns([1,1,3,1])
                     include = col1.checkbox("Incluir", value=bool(r["include_in_report"]), key=f"inc_{r['id']}")
                     order = col2.number_input("Ordem", 1, 999, value=int(r["display_order"]), key=f"ord_{r['id']}")
-                    label = col3.text_input(
-                        "Rótulo (aparece na legenda)",
-                        value=r["label"] or "",
-                        key=f"lab_{r['id']}"
-                    )
-                    caption = st.text_area(
-                        "Observação (para IA — não aparece no relatório)",
-                        value=r["caption"] or "",
-                        key=f"cap_{r['id']}", height=80
-                    )
+                    label = col3.text_input("Rótulo (aparece na legenda)", value=r["label"] or "", key=f"lab_{r['id']}")
+                    caption = st.text_area("Observação (para IA — não aparece no relatório)", value=r["caption"] or "", key=f"cap_{r['id']}", height=80)
                     cA, cB = st.columns(2)
                     if cA.button("Atualizar", key=f"upd_{r['id']}"):
                         try:
@@ -212,8 +209,7 @@ def render():
                             st.success("Atualizado ✓")
                             _log(f"Foto {r['id']} atualizada: include={include}, order={order}, label='{label}'")
                         except Exception as e:
-                            st.exception(e)
-                            _log(f"ERRO ao atualizar foto {r['id']}: {e}")
+                            st.exception(e); _log(f"ERRO ao atualizar foto {r['id']}: {e}")
                     if cB.button("Excluir", key=f"del_{r['id']}", type="secondary"):
                         try:
                             delete_photo(r["id"])
@@ -221,8 +217,7 @@ def render():
                             _log(f"Foto {r['id']} excluída.")
                             st.rerun()
                         except Exception as e:
-                            st.exception(e)
-                            _log(f"ERRO ao excluir foto {r['id']}: {e}")
+                            st.exception(e); _log(f"ERRO ao excluir foto {r['id']}: {e}")
 
     # ===== Galeria geral da VRP =====
     with section_card("Galeria da VRP (todas as coletas)"):
@@ -233,18 +228,43 @@ def render():
             cols = st.columns(3)
             for i, r in enumerate(all_rows):
                 with cols[i % 3]:
-                    st.image(
-                        r["file_path"],
-                        use_container_width=True,
-                        caption=f"CK {r['checklist_id']} • {r['label']}"
-                    )
+                    img_path = Path(str(r["file_path"])).resolve()
+                    if img_path.exists():
+                        st.image(str(img_path), use_container_width=True, caption=f"CK {r['checklist_id']} • {r['label']}")
+                    else:
+                        st.caption(f"CK {r['checklist_id']} • {r['label']} — [arquivo ausente]")
+
+    # ===== Diagnóstico do Banco =====
+    with section_card("Diagnóstico do Banco (photos)", "Confirma DB em uso, colunas e amostra."):
+        conn = get_conn()
+        dbl = conn.execute("PRAGMA database_list").fetchone()
+        db_file = Path(dbl["file"]).resolve() if dbl and dbl["file"] else Path(".").resolve()
+        total = conn.execute("SELECT COUNT(*) AS n FROM photos").fetchone()["n"]
+        cols = conn.execute("PRAGMA table_info(photos)").fetchall()
+        sample = conn.execute(
+            "SELECT id, checklist_id, vrp_site_id, "
+            "COALESCE(file_path, path) AS file_path "
+            "FROM photos WHERE checklist_id=? ORDER BY id DESC LIMIT 5",
+            (cid,),
+        ).fetchall()
+        conn.close()
+
+        st.write(f"**DB usado:** {db_file}")
+        st.write(f"**Total em photos:** {total}")
+        st.caption("Colunas de photos:")
+        st.code(", ".join([c["name"] for c in cols]), language="text")
+        if sample:
+            st.write("**Amostra (últimos 5 deste checklist):**")
+            for r in sample:
+                st.write(dict(r))
+        else:
+            st.info("Sem registros deste checklist (ou DB diferente).")
 
     # ===== Logs =====
     with section_card("Logs", "Registros desta sessão (não persistentes)."):
         colA, colB = st.columns([1,3])
         if colA.button("Limpar logs"):
             st.session_state["photo_logs"] = []
-
         logs_bytes = ("\n".join(st.session_state.get("photo_logs", []))).encode("utf-8")
         colB.download_button(
             "Baixar logs (.txt)",
@@ -252,8 +272,8 @@ def render():
             file_name=f"logs_fotos_{_now().replace(':','-')}.txt",
             mime="text/plain"
         )
-
         if st.session_state.get("photo_logs"):
             st.text_area("Saída de logs", value="\n".join(st.session_state["photo_logs"]), height=220)
         else:
             st.caption("Sem logs nesta sessão. As ações realizadas serão registradas aqui.")
+# ------------------------ Fim ------------------------
