@@ -103,7 +103,7 @@ def list_photos_by_vrp(vrp_site_id: int) -> List[Dict[str, Any]]:
     finally:
         conn.close()
 
-def list_photos_by_vrp(vrp_site_id: int) -> List[Dict[str, Any]]:
+def list_photos(checklist_id: int) -> List[Dict[str, Any]]:
     conn = get_conn()
     try:
         cols = _cols(conn, "photos")
@@ -125,10 +125,10 @@ def list_photos_by_vrp(vrp_site_id: int) -> List[Dict[str, Any]]:
                    {drive_sel}   AS drive_file_id,
                    {eph_sel}     AS ephemeral
             FROM photos
-            WHERE vrp_site_id = ?
-            ORDER BY checklist_id DESC, display_order, id
+            WHERE checklist_id = ?
+            ORDER BY {order_sel}, id
         """
-        rows = conn.execute(sql, (vrp_site_id,)).fetchall()
+        rows = conn.execute(sql, (checklist_id,)).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
