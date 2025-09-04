@@ -157,6 +157,16 @@ def init_db():
         cur.execute("ALTER TABLE vrp_sites ADD COLUMN has_automation INTEGER DEFAULT 0;")
         conn.commit()
 
+        # dentro de init_db(), depois de criar/garantir a tabela photos:
+    if not _column_exists(conn, "photos", "drive_file_id"):
+        cur.execute("ALTER TABLE photos ADD COLUMN drive_file_id TEXT;")
+        conn.commit()
+
+    if not _column_exists(conn, "photos", "ephemeral"):
+        cur.execute("ALTER TABLE photos ADD COLUMN ephemeral INTEGER DEFAULT 1;")
+        conn.commit()
+
+
     conn.close()
 
 
